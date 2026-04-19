@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Video Controller</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body {
+      font: 13px/1.4 -apple-system, system-ui, sans-serif;
+      margin: 0;
+      padding: 14px;
+      width: 300px;
+    }
+    h1 {
+      font-size: 14px;
+      margin: 0 0 10px;
+    }
+    .row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 8px;
+      gap: 8px;
+    }
+    label {
+      flex: 1;
+      color: #555;
+    }
+    @media (prefers-color-scheme: dark) {
+      label { color: #bbb; }
+    }
+    .key-btn, input[type="number"] {
+      min-width: 96px;
+      padding: 6px 8px;
+      border: 1px solid #bbb;
+      border-radius: 4px;
+      background: transparent;
+      font: inherit;
+      text-align: center;
+      color: inherit;
+      cursor: pointer;
+      box-sizing: border-box;
+    }
+    input[type="number"] { cursor: text; text-align: right; }
+    .key-btn:hover { border-color: #666; }
+    .key-btn.listening {
+      border-color: #0a7;
+      background: rgba(0, 170, 119, 0.08);
+    }
+    .actions {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 12px;
+      gap: 8px;
+    }
+    button.primary, button.secondary {
+      flex: 1;
+      padding: 7px 10px;
+      border-radius: 4px;
+      font: inherit;
+      cursor: pointer;
+      border: 1px solid transparent;
+    }
+    button.primary {
+      background: #0a7;
+      color: #fff;
+    }
+    button.primary:hover { background: #095; }
+    button.secondary {
+      background: transparent;
+      border-color: #bbb;
+      color: inherit;
+    }
+    button.secondary:hover { border-color: #666; }
+    .status {
+      margin-top: 8px;
+      min-height: 16px;
+      font-size: 12px;
+      color: #0a7;
+      text-align: center;
+    }
+    .hint {
+      font-size: 11px;
+      color: #888;
+      margin-top: 4px;
+    }
+    .section {
+      margin-top: 14px;
+      padding-top: 10px;
+      border-top: 1px solid rgba(128, 128, 128, 0.2);
+    }
+    .section-title {
+      font-size: 12px;
+      font-weight: 600;
+      color: #555;
+      margin-bottom: 6px;
+    }
+    @media (prefers-color-scheme: dark) {
+      .section-title { color: #bbb; }
+    }
+    textarea {
+      width: 100%;
+      min-height: 70px;
+      box-sizing: border-box;
+      padding: 6px 8px;
+      border: 1px solid #bbb;
+      border-radius: 4px;
+      background: transparent;
+      font: 12px/1.4 ui-monospace, Menlo, monospace;
+      color: inherit;
+      resize: vertical;
+    }
+    textarea:focus { outline: none; border-color: #0a7; }
+  </style>
+</head>
+<body>
+  <h1>Video Controller</h1>
+
+  <div class="row">
+    <label for="keyForward">Forward</label>
+    <button class="key-btn" id="keyForward" data-action="forward"></button>
+  </div>
+  <div class="row">
+    <label for="keyBackward">Backward</label>
+    <button class="key-btn" id="keyBackward" data-action="backward"></button>
+  </div>
+  <div class="row">
+    <label for="keyVolumeUp">Volume Up</label>
+    <button class="key-btn" id="keyVolumeUp" data-action="volumeUp"></button>
+  </div>
+  <div class="row">
+    <label for="keyVolumeDown">Volume Down</label>
+    <button class="key-btn" id="keyVolumeDown" data-action="volumeDown"></button>
+  </div>
+  <div class="row">
+    <label for="keyTheater">Theater Mode</label>
+    <button class="key-btn" id="keyTheater" data-action="theater"></button>
+  </div>
+  <div class="hint">Click a button, then press a key to bind it.</div>
+
+  <div class="row" style="margin-top: 12px;">
+    <label for="seekSeconds">Seek step (seconds)</label>
+    <input type="number" id="seekSeconds" min="1" max="600" step="1" />
+  </div>
+
+  <div class="section">
+    <div class="section-title">Auto Theater Mode</div>
+    <textarea id="autoDomains" placeholder="One domain per line, e.g.&#10;v.ikanbot.com&#10;youtube.com"></textarea>
+    <div class="hint">Theater mode activates automatically on these domains when a video starts playing. Subdomains are matched (e.g. <code>youtube.com</code> covers <code>www.youtube.com</code>).</div>
+  </div>
+
+  <div class="actions">
+    <button class="secondary" id="resetBtn">Reset</button>
+    <button class="primary" id="saveBtn">Save</button>
+  </div>
+  <div class="status" id="status"></div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
