@@ -7,6 +7,7 @@
     theater: 't',
     seekSeconds: 5,
     autoTheaterDomains: [],
+    disabledDomains: ['netflix.com', 'youtube.com'],
   };
   const VOLUME_STEP = 0.1;
 
@@ -96,17 +97,32 @@
     originalVideoStyle: '',
     originalOverflow: '',
     backdrop: null,
+    placeholder: null,
+    closeBtn: null,
+  };
+
+  const PLAYER_CLASS_RE = /\b(plyr|player|jwplayer|vjs|jw-player|video-js|video-player|videoplayer|html5-video-player)\b/i;
+
+  const isPlayerLike = (el) => {
+    const cls = typeof el.className === 'string' ? el.className : '';
+    const id = el.id || '';
+    return PLAYER_CLASS_RE.test(cls) || PLAYER_CLASS_RE.test(id);
   };
 
   const pickPlayerContainer = (video) => {
     const vRect = video.getBoundingClientRect();
     let el = video.parentElement;
+    let firstMatching = null;
+    let bestPlayerLike = null;
     while (el && el !== document.body && el !== document.documentElement) {
       const r = el.getBoundingClientRect();
-      if (r.width >= vRect.width - 2 && r.height >= vRect.height - 2) return el;
+      const matches = r.width >= vRect.width - 2 && r.height >= vRect.height - 2;
+      if (!matches) break;
+      if (!firstMatching) firstMatching = el;
+      if (isPlayerLike(el)) bestPlayerLike = el;
       el = el.parentElement;
     }
-    return video.parentElement || video;
+    return bestPlayerLike || firstMatching || video.parentElement || video;
   };
 
   const enter = (video) => {
@@ -118,12 +134,46 @@
     theater.originalVideoStyle = video.getAttribute('style') || '';
     theater.originalOverflow = document.documentElement.style.overflow;
 
+    const placeholder = document.createComment('video-controller-theater-placeholder');
+    if (container.parentNode) {
+      container.parentNode.insertBefore(placeholder, container);
+      document.documentElement.appendChild(container);
+    }
+    theater.placeholder = placeholder;
+
     const backdrop = document.createElement('div');
     backdrop.id = '__video_optimizer_backdrop__';
     backdrop.style.cssText = 'position:fixed;inset:0;background:#000;z-index:2147483645';
     backdrop.addEventListener('click', exit);
-    document.documentElement.appendChild(backdrop);
+    document.documentElement.insertBefore(backdrop, container);
     theater.backdrop = backdrop;
+
+    const closeBtn = document.createElement('button');
+    closeBtn.type = 'button';
+    closeBtn.setAttribute('aria-label', 'Exit theater mode');
+    closeBtn.textContent = '✕';
+    closeBtn.style.cssText = [
+      'position:fixed',
+      'top:12px',
+      'right:12px',
+      'width:36px',
+      'height:36px',
+      'padding:0',
+      'border:0',
+      'border-radius:50%',
+      'background:rgba(0,0,0,0.55)',
+      'color:#fff',
+      'font:600 18px/1 -apple-system,system-ui,sans-serif',
+      'cursor:pointer',
+      'opacity:0.85',
+      'z-index:2147483647',
+      'display:flex',
+      'align-items:center',
+      'justify-content:center',
+    ].join(';');
+    closeBtn.addEventListener('click', (e) => { e.stopPropagation(); exit(); });
+    document.documentElement.appendChild(closeBtn);
+    theater.closeBtn = closeBtn;
 
     const fix = (el, props) => {
       for (const [k, v] of Object.entries(props)) el.style.setProperty(k, v, 'important');
@@ -157,15 +207,28 @@
 
   function exit() {
     if (!theater.active) return;
-    const { container, video, originalContainerStyle, originalVideoStyle, originalOverflow, backdrop } = theater;
-    if (container) container.setAttribute('style', originalContainerStyle);
-    if (video) video.setAttribute('style', originalVideoStyle);
+    const { container, video, originalContainerStyle, originalVideoStyle, originalOverflow, backdrop, placeholder, closeBtn } = theater;
+    if (container) {
+      if (originalContainerStyle) container.setAttribute('style', originalContainerStyle);
+      else container.removeAttribute('style');
+    }
+    if (video) {
+      if (originalVideoStyle) video.setAttribute('style', originalVideoStyle);
+      else video.removeAttribute('style');
+    }
+    if (placeholder && placeholder.parentNode && container) {
+      placeholder.parentNode.insertBefore(container, placeholder);
+      placeholder.remove();
+    }
     if (backdrop) backdrop.remove();
+    if (closeBtn) closeBtn.remove();
     document.documentElement.style.overflow = originalOverflow || '';
     theater.active = false;
     theater.container = null;
     theater.video = null;
     theater.backdrop = null;
+    theater.placeholder = null;
+    theater.closeBtn = null;
     showToast('Theater off');
   }
 
@@ -178,6 +241,15 @@
     if (e.ctrlKey || e.metaKey || e.altKey) return;
     if (isTypingTarget(e.target)) return;
 
+    if (e.key === 'Escape' && theater.active) {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      exit();
+      return;
+    }
+
+    if (isDisabledHere()) return;
+
     const action = matchAction(e.key);
     if (!action) return;
 
@@ -185,7 +257,7 @@
     if (!video) return;
 
     e.preventDefault();
-    e.stopPropagation();
+    e.stopImmediatePropagation();
 
     const step = settings.seekSeconds;
     if (action === 'forward') {
@@ -217,9 +289,16 @@
     return list.some((entry) => hostMatchesDomain(host, (entry || '').toLowerCase()));
   };
 
+  const isDisabledHere = () => {
+    const host = (location.hostname || '').toLowerCase();
+    const list = settings.disabledDomains || [];
+    return list.some((entry) => hostMatchesDomain(host, (entry || '').toLowerCase()));
+  };
+
   let autoTheaterDone = false;
   const tryAutoTheater = (video) => {
     if (autoTheaterDone || theater.active) return;
+    if (isDisabledHere()) return;
     if (!shouldAutoTheater()) return;
     const v = video || pickVideo();
     if (!v) return;

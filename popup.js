@@ -6,6 +6,7 @@ const DEFAULTS = {
   theater: 't',
   seekSeconds: 5,
   autoTheaterDomains: [],
+  disabledDomains: ['netflix.com', 'youtube.com'],
 };
 
 const ACTIONS = ['forward', 'backward', 'volumeUp', 'volumeDown', 'theater'];
@@ -48,6 +49,7 @@ const render = () => {
   });
   $('seekSeconds').value = state.seekSeconds;
   $('autoDomains').value = (state.autoTheaterDomains || []).join('\n');
+  $('blockDomains').value = (state.disabledDomains || []).join('\n');
 };
 
 const stopListening = () => {
@@ -79,6 +81,7 @@ const save = async () => {
     ...state,
     seekSeconds: Number.isFinite(secs) && secs > 0 ? Math.min(600, Math.floor(secs)) : DEFAULTS.seekSeconds,
     autoTheaterDomains: parseDomains($('autoDomains').value),
+    disabledDomains: parseDomains($('blockDomains').value),
   };
   Object.assign(state, next);
   await chrome.storage.sync.set(next);
