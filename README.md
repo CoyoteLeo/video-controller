@@ -18,6 +18,10 @@ A minimalist Chrome extension that gives every HTML5 video on the web a consiste
 
 ## Install
 
+### Chrome Web Store
+
+[Install Video Controller](https://chromewebstore.google.com/detail/video-controller/odbmnkohkfnonjhklflollbpepmbdjlp)
+
 ### From source (unpacked)
 
 1. `git clone git@github.com:CoyoteLeo/video-controller.git`
