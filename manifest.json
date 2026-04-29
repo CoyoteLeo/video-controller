@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Video Controller",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "description": "Configurable keyboard controls for any HTML5 video: seek, adjust volume, theater mode, and per-domain auto-theater.",
   "permissions": ["storage"],
   "icons": {

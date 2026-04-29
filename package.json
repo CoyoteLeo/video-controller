@@ -1,6 +1,6 @@
 {
   "name": "video-controller",
-  "version": "1.2.0",
+  "version": "1.4.0",
   "description": "Configurable keyboard controls for any HTML5 video: seek, adjust volume, theater mode, and per-domain auto-theater.",
   "private": true,
   "license": "MIT",

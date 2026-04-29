@@ -10,8 +10,11 @@
     disabledDomains: ['netflix.com', 'youtube.com'],
   };
   const VOLUME_STEP = 0.1;
+  const MSG_TAG = '__video_controller_v1__';
+  const isTop = window === window.top;
 
   let settings = { ...DEFAULTS };
+  let hasDescendantVideo = false;
 
   const pickVideo = () => {
     const videos = Array.from(document.querySelectorAll('video'));
@@ -237,6 +240,33 @@
     else enter(video);
   };
 
+  const performAction = (action, video) => {
+    const step = settings.seekSeconds;
+    if (action === 'forward') {
+      video.currentTime = clamp(video.currentTime + step, 0, video.duration || Infinity);
+      showToast(`⏩ +${step}s  (${formatTime(video.currentTime)})`);
+    } else if (action === 'backward') {
+      video.currentTime = clamp(video.currentTime - step, 0, video.duration || Infinity);
+      showToast(`⏪ -${step}s  (${formatTime(video.currentTime)})`);
+    } else if (action === 'volumeUp') {
+      video.muted = false;
+      video.volume = clamp(video.volume + VOLUME_STEP, 0, 1);
+      showToast(`🔊 ${Math.round(video.volume * 100)}%`);
+    } else if (action === 'volumeDown') {
+      video.volume = clamp(video.volume - VOLUME_STEP, 0, 1);
+      showToast(`🔉 ${Math.round(video.volume * 100)}%`);
+    } else if (action === 'theater') {
+      toggleTheater(video);
+    }
+  };
+
+  const broadcastActionToFrames = (action) => {
+    const frames = window.frames;
+    for (let i = 0; i < frames.length; i++) {
+      try { frames[i].postMessage({ tag: MSG_TAG, type: 'action', action }, '*'); } catch (_) { /* cross-origin */ }
+    }
+  };
+
   const handler = (e) => {
     if (e.ctrlKey || e.metaKey || e.altKey) return;
     if (isTypingTarget(e.target)) return;
@@ -254,27 +284,17 @@
     if (!action) return;
 
     const video = pickVideo();
-    if (!video) return;
+    if (video) {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      performAction(action, video);
+      return;
+    }
 
-    e.preventDefault();
-    e.stopImmediatePropagation();
-
-    const step = settings.seekSeconds;
-    if (action === 'forward') {
-      video.currentTime = clamp(video.currentTime + step, 0, video.duration || Infinity);
-      showToast(`⏩ +${step}s  (${formatTime(video.currentTime)})`);
-    } else if (action === 'backward') {
-      video.currentTime = clamp(video.currentTime - step, 0, video.duration || Infinity);
-      showToast(`⏪ -${step}s  (${formatTime(video.currentTime)})`);
-    } else if (action === 'volumeUp') {
-      video.muted = false;
-      video.volume = clamp(video.volume + VOLUME_STEP, 0, 1);
-      showToast(`🔊 ${Math.round(video.volume * 100)}%`);
-    } else if (action === 'volumeDown') {
-      video.volume = clamp(video.volume - VOLUME_STEP, 0, 1);
-      showToast(`🔉 ${Math.round(video.volume * 100)}%`);
-    } else if (action === 'theater') {
-      toggleTheater(video);
+    if (hasDescendantVideo) {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      broadcastActionToFrames(action);
     }
   };
 
@@ -306,14 +326,62 @@
     enter(v);
   };
 
+  const announceVideoToParent = () => {
+    if (isTop) return;
+    try { window.parent.postMessage({ tag: MSG_TAG, type: 'has-video' }, '*'); } catch (_) { /* cross-origin */ }
+  };
+
+  let announcedToParent = false;
+  const announceIfVideoFound = () => {
+    if (announcedToParent || isTop) return;
+    if (document.querySelector('video')) {
+      announceVideoToParent();
+      announcedToParent = true;
+    }
+  };
+
   const onAnyVideoPlay = (e) => {
     const v = e.target;
     if (!(v instanceof HTMLVideoElement)) return;
+    announceIfVideoFound();
     tryAutoTheater(v);
   };
 
+  window.addEventListener('message', (e) => {
+    const data = e.data;
+    if (!data || typeof data !== 'object' || data.tag !== MSG_TAG) return;
+
+    if (data.type === 'has-video') {
+      hasDescendantVideo = true;
+      if (!isTop && !announcedToParent) {
+        announceVideoToParent();
+        announcedToParent = true;
+      }
+      return;
+    }
+
+    if (data.type === 'action') {
+      if (isDisabledHere()) return;
+      const video = pickVideo();
+      if (video) {
+        performAction(data.action, video);
+      } else if (hasDescendantVideo) {
+        broadcastActionToFrames(data.action);
+      }
+    }
+  });
+
+  if (!isTop) {
+    const videoObserver = new MutationObserver(() => {
+      announceIfVideoFound();
+      if (announcedToParent) videoObserver.disconnect();
+    });
+    videoObserver.observe(document.documentElement, { childList: true, subtree: true });
+  }
+
   chrome.storage.sync.get(DEFAULTS, (stored) => {
     settings = { ...settings, ...stored };
+    announceIfVideoFound();
     const v = pickVideo();
     if (v && !v.paused && !v.ended) tryAutoTheater(v);
   });
