@@ -5,6 +5,8 @@
     volumeUp: 'ArrowUp',
     volumeDown: 'ArrowDown',
     theater: 't',
+    playPause: ' ',
+    mute: 'm',
     seekSeconds: 5,
     autoTheaterDomains: [],
     disabledDomains: ['netflix.com', 'youtube.com'],
@@ -89,6 +91,8 @@
     if (keyEq(key, settings.volumeUp)) return 'volumeUp';
     if (keyEq(key, settings.volumeDown)) return 'volumeDown';
     if (keyEq(key, settings.theater)) return 'theater';
+    if (keyEq(key, settings.playPause)) return 'playPause';
+    if (keyEq(key, settings.mute)) return 'mute';
     return null;
   };
 
@@ -257,6 +261,18 @@
       showToast(`🔉 ${Math.round(video.volume * 100)}%`);
     } else if (action === 'theater') {
       toggleTheater(video);
+    } else if (action === 'playPause') {
+      if (video.paused || video.ended) {
+        const p = video.play();
+        if (p && typeof p.catch === 'function') p.catch(() => {});
+        showToast('▶️ Play');
+      } else {
+        video.pause();
+        showToast('⏸️ Pause');
+      }
+    } else if (action === 'mute') {
+      video.muted = !video.muted;
+      showToast(video.muted ? '🔇 Muted' : `🔊 ${Math.round(video.volume * 100)}%`);
     }
   };
 
