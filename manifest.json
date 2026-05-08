@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Video Controller",
-  "version": "1.5.0",
+  "version": "1.5.2",
   "description": "Configurable keyboard controls for HTML5 video: play/pause, mute, seek, volume, theater mode, and per-domain auto-theater.",
   "permissions": ["storage"],
   "icons": {

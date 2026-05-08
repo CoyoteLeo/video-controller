@@ -85,14 +85,32 @@
     return a === b;
   };
 
-  const matchAction = (key) => {
-    if (keyEq(key, settings.forward)) return 'forward';
-    if (keyEq(key, settings.backward)) return 'backward';
-    if (keyEq(key, settings.volumeUp)) return 'volumeUp';
-    if (keyEq(key, settings.volumeDown)) return 'volumeDown';
-    if (keyEq(key, settings.theater)) return 'theater';
-    if (keyEq(key, settings.playPause)) return 'playPause';
-    if (keyEq(key, settings.mute)) return 'mute';
+  // Derive a key string from KeyboardEvent.code so shortcuts work under IMEs
+  // (e.g., Chinese/Japanese), where e.key reports "Process" for letters/space.
+  const keyFromCode = (code) => {
+    if (!code) return null;
+    if (code.length === 4 && code.startsWith('Key')) return code.slice(3).toLowerCase();
+    if (code.length === 6 && code.startsWith('Digit')) return code.slice(5);
+    if (code === 'Space') return ' ';
+    if (code.startsWith('Arrow')) return code;
+    if (code === 'Escape') return 'Escape';
+    return null;
+  };
+
+  const eventMatches = (e, target) => {
+    if (keyEq(e.key, target)) return true;
+    const fromCode = keyFromCode(e.code);
+    return fromCode ? keyEq(fromCode, target) : false;
+  };
+
+  const matchAction = (e) => {
+    if (eventMatches(e, settings.forward)) return 'forward';
+    if (eventMatches(e, settings.backward)) return 'backward';
+    if (eventMatches(e, settings.volumeUp)) return 'volumeUp';
+    if (eventMatches(e, settings.volumeDown)) return 'volumeDown';
+    if (eventMatches(e, settings.theater)) return 'theater';
+    if (eventMatches(e, settings.playPause)) return 'playPause';
+    if (eventMatches(e, settings.mute)) return 'mute';
     return null;
   };
 
@@ -264,8 +282,11 @@
     } else if (action === 'playPause') {
       if (video.paused || video.ended) {
         const p = video.play();
-        if (p && typeof p.catch === 'function') p.catch(() => {});
-        showToast('▶️ Play');
+        if (p && typeof p.then === 'function') {
+          p.then(() => showToast('▶️ Play')).catch(() => showToast('⚠️ Play blocked'));
+        } else {
+          showToast('▶️ Play');
+        }
       } else {
         video.pause();
         showToast('⏸️ Pause');
@@ -287,7 +308,7 @@
     if (e.ctrlKey || e.metaKey || e.altKey) return;
     if (isTypingTarget(e.target)) return;
 
-    if (e.key === 'Escape' && theater.active) {
+    if ((e.key === 'Escape' || e.code === 'Escape') && theater.active) {
       e.preventDefault();
       e.stopImmediatePropagation();
       exit();
@@ -296,7 +317,7 @@
 
     if (isDisabledHere()) return;
 
-    const action = matchAction(e.key);
+    const action = matchAction(e);
     if (!action) return;
 
     const video = pickVideo();
@@ -393,6 +414,14 @@
       if (announcedToParent) videoObserver.disconnect();
     });
     videoObserver.observe(document.documentElement, { childList: true, subtree: true });
+  } else {
+    const topVideoObserver = new MutationObserver(() => {
+      const v = pickVideo();
+      if (!v) return;
+      tryAutoTheater(v);
+      topVideoObserver.disconnect();
+    });
+    topVideoObserver.observe(document.documentElement, { childList: true, subtree: true });
   }
 
   chrome.storage.sync.get(DEFAULTS, (stored) => {
