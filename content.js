@@ -17,6 +17,7 @@
 
   let settings = { ...DEFAULTS };
   let hasDescendantVideo = false;
+  let ancestorHasVideo = false;
 
   const pickVideo = () => {
     const videos = Array.from(document.querySelectorAll('video'));
@@ -297,10 +298,42 @@
     }
   };
 
-  const broadcastActionToFrames = (action) => {
+  const broadcastActionToFrames = (action, exceptSource) => {
     const frames = window.frames;
     for (let i = 0; i < frames.length; i++) {
+      if (frames[i] === exceptSource) continue;
       try { frames[i].postMessage({ tag: MSG_TAG, type: 'action', action }, '*'); } catch (_) { /* cross-origin */ }
+    }
+  };
+
+  const bubbleActionToParent = (action) => {
+    if (isTop) return false;
+    try {
+      window.parent.postMessage({ tag: MSG_TAG, type: 'action-bubble', action }, '*');
+      return true;
+    } catch (_) {
+      return false;
+    }
+  };
+
+  const tryHandleActionLocally = (action, exceptSource) => {
+    const video = pickVideo();
+    if (video) {
+      performAction(action, video);
+      return true;
+    }
+    if (hasDescendantVideo) {
+      broadcastActionToFrames(action, exceptSource);
+      return true;
+    }
+    return false;
+  };
+
+  const announceAncestorHasVideoToFrames = (exceptSource) => {
+    const frames = window.frames;
+    for (let i = 0; i < frames.length; i++) {
+      if (frames[i] === exceptSource) continue;
+      try { frames[i].postMessage({ tag: MSG_TAG, type: 'ancestor-has-video' }, '*'); } catch (_) { /* cross-origin */ }
     }
   };
 
@@ -320,18 +353,15 @@
     const action = matchAction(e);
     if (!action) return;
 
-    const video = pickVideo();
-    if (video) {
+    if (tryHandleActionLocally(action, null)) {
       e.preventDefault();
       e.stopImmediatePropagation();
-      performAction(action, video);
       return;
     }
 
-    if (hasDescendantVideo) {
+    if (ancestorHasVideo && bubbleActionToParent(action)) {
       e.preventDefault();
       e.stopImmediatePropagation();
-      broadcastActionToFrames(action);
     }
   };
 
@@ -369,11 +399,16 @@
   };
 
   let announcedToParent = false;
+  let announcedToDescendants = false;
   const announceIfVideoFound = () => {
-    if (announcedToParent || isTop) return;
-    if (document.querySelector('video')) {
+    if (!document.querySelector('video')) return;
+    if (!isTop && !announcedToParent) {
       announceVideoToParent();
       announcedToParent = true;
+    }
+    if (!announcedToDescendants) {
+      announceAncestorHasVideoToFrames();
+      announcedToDescendants = true;
     }
   };
 
@@ -389,37 +424,59 @@
     if (!data || typeof data !== 'object' || data.tag !== MSG_TAG) return;
 
     if (data.type === 'has-video') {
+      const firstHearing = !hasDescendantVideo;
       hasDescendantVideo = true;
-      if (!isTop && !announcedToParent) {
+      if (firstHearing && !isTop && !announcedToParent) {
         announceVideoToParent();
         announcedToParent = true;
+      }
+      // Let the source's siblings know there's a video somewhere in the tree,
+      // so they can bubble shortcuts up instead of dropping them.
+      announceAncestorHasVideoToFrames(e.source);
+      return;
+    }
+
+    if (data.type === 'ancestor-has-video') {
+      if (ancestorHasVideo) return;
+      ancestorHasVideo = true;
+      announceAncestorHasVideoToFrames(e.source);
+      return;
+    }
+
+    if (data.type === 'hello') {
+      // A child frame just loaded. If anyone in the tree has a video, let it know.
+      if (document.querySelector('video') || hasDescendantVideo || ancestorHasVideo) {
+        try { e.source.postMessage({ tag: MSG_TAG, type: 'ancestor-has-video' }, '*'); } catch (_) { /* cross-origin */ }
       }
       return;
     }
 
     if (data.type === 'action') {
       if (isDisabledHere()) return;
-      const video = pickVideo();
-      if (video) {
-        performAction(data.action, video);
-      } else if (hasDescendantVideo) {
-        broadcastActionToFrames(data.action);
-      }
+      tryHandleActionLocally(data.action, e.source);
+      return;
+    }
+
+    if (data.type === 'action-bubble') {
+      if (isDisabledHere()) return;
+      if (tryHandleActionLocally(data.action, e.source)) return;
+      bubbleActionToParent(data.action);
     }
   });
 
   if (!isTop) {
     const videoObserver = new MutationObserver(() => {
       announceIfVideoFound();
-      if (announcedToParent) videoObserver.disconnect();
+      if (announcedToParent && announcedToDescendants) videoObserver.disconnect();
     });
     videoObserver.observe(document.documentElement, { childList: true, subtree: true });
   } else {
     const topVideoObserver = new MutationObserver(() => {
+      announceIfVideoFound();
       const v = pickVideo();
       if (!v) return;
       tryAutoTheater(v);
-      topVideoObserver.disconnect();
+      if (announcedToDescendants) topVideoObserver.disconnect();
     });
     topVideoObserver.observe(document.documentElement, { childList: true, subtree: true });
   }
@@ -441,4 +498,10 @@
 
   document.addEventListener('play', onAnyVideoPlay, true);
   window.addEventListener('keydown', handler, true);
+
+  // Ask the parent if it (or any ancestor / sibling subtree) has a video,
+  // so we know to bubble keys up even though our own frame has none.
+  if (!isTop) {
+    try { window.parent.postMessage({ tag: MSG_TAG, type: 'hello' }, '*'); } catch (_) { /* cross-origin */ }
+  }
 })();
