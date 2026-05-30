@@ -31,10 +31,19 @@
     }, null);
   };
 
+  // Only inputs that accept typed text should suppress shortcuts. Non-text
+  // controls like a player's <input type="range"> seek bar grab focus when
+  // clicked, but typing into them is meaningless — keep shortcuts working.
+  const TEXT_INPUT_TYPES = new Set([
+    'text', 'search', 'email', 'url', 'tel', 'password', 'number',
+    'date', 'datetime-local', 'month', 'week', 'time',
+  ]);
+
   const isTypingTarget = (el) => {
     if (!el) return false;
     const tag = el.tagName;
-    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
+    if (tag === 'TEXTAREA' || tag === 'SELECT') return true;
+    if (tag === 'INPUT') return TEXT_INPUT_TYPES.has((el.type || 'text').toLowerCase());
     if (el.isContentEditable) return true;
     return false;
   };
