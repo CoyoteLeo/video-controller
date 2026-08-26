@@ -1,17 +1,17 @@
 (() => {
   const VC = (globalThis.__videoController ??= {});
 
-  const theater = {
-    active: false,
-    container: null,
-    video: null,
-    originalContainerStyle: '',
-    originalVideoStyle: '',
-    originalOverflow: '',
-    backdrop: null,
-    placeholder: null,
-    closeBtn: null,
-  };
+  const DEFAULTS = VC.transform.DEFAULT_EFFECTS;
+
+  let effects = DEFAULTS;
+
+  // Everything we changed, in one place. Theater and the transforms used to keep
+  // separate copies of "the original value", which is how they end up disagreeing.
+  let take = null;
+
+  const isDefault = (e) =>
+    e.rotate === DEFAULTS.rotate && e.flipX === DEFAULTS.flipX && e.flipY === DEFAULTS.flipY
+    && e.zoom === DEFAULTS.zoom && e.pan.x === 0 && e.pan.y === 0 && e.theater === DEFAULTS.theater;
 
   const PLAYER_CLASS_RE = /\b(plyr|player|jwplayer|vjs|jw-player|video-js|video-player|videoplayer|html5-video-player)\b/i;
 
@@ -37,28 +37,47 @@
     return bestPlayerLike || firstMatching || video.parentElement || video;
   };
 
-  const enter = (video) => {
-    if (theater.active) return;
-    const container = pickPlayerContainer(video);
-    theater.video = video;
-    theater.container = container;
-    theater.originalContainerStyle = container.getAttribute('style') || '';
-    theater.originalVideoStyle = video.getAttribute('style') || '';
-    theater.originalOverflow = document.documentElement.style.overflow;
+  const captureStyle = (el) => el.getAttribute('style');
+
+  const restoreStyle = (el, original) => {
+    if (original === null) el.removeAttribute('style');
+    else el.setAttribute('style', original);
+  };
+
+  const open = (video) => ({
+    video,
+    container: pickPlayerContainer(video),
+    originalVideoStyle: captureStyle(video),
+    originalContainerStyle: null,
+    originalRootOverflow: document.documentElement.style.overflow,
+    clipped: [],
+    theaterOn: false,
+    backdrop: null,
+    placeholder: null,
+    closeBtn: null,
+  });
+
+  const fix = (el, props) => {
+    for (const [k, v] of Object.entries(props)) el.style.setProperty(k, v, 'important');
+  };
+
+  const enterTheater = () => {
+    const { video, container } = take;
+    take.originalContainerStyle = captureStyle(container);
 
     const placeholder = document.createComment('video-controller-theater-placeholder');
     if (container.parentNode) {
       container.parentNode.insertBefore(placeholder, container);
       document.documentElement.appendChild(container);
     }
-    theater.placeholder = placeholder;
+    take.placeholder = placeholder;
 
     const backdrop = document.createElement('div');
     backdrop.id = '__video_optimizer_backdrop__';
     backdrop.style.cssText = 'position:fixed;inset:0;background:#000;z-index:2147483645';
-    backdrop.addEventListener('click', exit);
+    backdrop.addEventListener('click', () => apply({ theater: false }));
     document.documentElement.insertBefore(backdrop, container);
-    theater.backdrop = backdrop;
+    take.backdrop = backdrop;
 
     const closeBtn = document.createElement('button');
     closeBtn.type = 'button';
@@ -83,13 +102,10 @@
       'align-items:center',
       'justify-content:center',
     ].join(';');
-    closeBtn.addEventListener('click', (e) => { e.stopPropagation(); exit(); });
+    closeBtn.addEventListener('click', (e) => { e.stopPropagation(); apply({ theater: false }); });
     document.documentElement.appendChild(closeBtn);
-    theater.closeBtn = closeBtn;
+    take.closeBtn = closeBtn;
 
-    const fix = (el, props) => {
-      for (const [k, v] of Object.entries(props)) el.style.setProperty(k, v, 'important');
-    };
     fix(container, {
       position: 'fixed',
       top: '0',
@@ -113,54 +129,134 @@
     });
 
     document.documentElement.style.overflow = 'hidden';
-    theater.active = true;
-    VC.panel.showToast('🎬 Theater mode');
+    take.theaterOn = true;
   };
 
-  function exit() {
-    if (!theater.active) return;
-    const { container, video, originalContainerStyle, originalVideoStyle, originalOverflow, backdrop, placeholder, closeBtn } = theater;
-    if (container) {
-      if (originalContainerStyle) container.setAttribute('style', originalContainerStyle);
-      else container.removeAttribute('style');
-    }
-    if (video) {
-      if (originalVideoStyle) video.setAttribute('style', originalVideoStyle);
-      else video.removeAttribute('style');
-    }
+  const leaveTheater = () => {
+    const { container, video, placeholder, backdrop, closeBtn } = take;
+    // Both style attributes go back to their captured values, which also wipes
+    // any transform — render() writes the transform again afterwards.
+    if (container) restoreStyle(container, take.originalContainerStyle);
+    if (video) restoreStyle(video, take.originalVideoStyle);
     if (placeholder && placeholder.parentNode && container) {
       placeholder.parentNode.insertBefore(container, placeholder);
       placeholder.remove();
     }
     if (backdrop) backdrop.remove();
     if (closeBtn) closeBtn.remove();
-    document.documentElement.style.overflow = originalOverflow || '';
-    theater.active = false;
-    theater.container = null;
-    theater.video = null;
-    theater.backdrop = null;
-    theater.placeholder = null;
-    theater.closeBtn = null;
-    VC.panel.showToast('Theater off');
+    document.documentElement.style.overflow = take.originalRootOverflow || '';
+    take.placeholder = null;
+    take.backdrop = null;
+    take.closeBtn = null;
+    take.originalContainerStyle = null;
+    take.theaterOn = false;
+  };
+
+  // A rotated or zoomed video overflows its box, and any ancestor that clips has
+  // to be opened up. Each one's own inline value is recorded, so releasing puts
+  // back "no inline overflow at all" rather than writing `visible` over it.
+  const releaseClips = () => {
+    for (const { el, value, priority } of take.clipped) {
+      if (value) el.style.setProperty('overflow', value, priority);
+      else el.style.removeProperty('overflow');
+    }
+    take.clipped = [];
+  };
+
+  const openClips = () => {
+    if (take.clipped.length) return;
+    let el = take.video.parentElement;
+    while (el && el !== document.documentElement) {
+      const cs = getComputedStyle(el);
+      if (cs.overflowX !== 'visible' || cs.overflowY !== 'visible') {
+        take.clipped.push({
+          el,
+          value: el.style.getPropertyValue('overflow'),
+          priority: el.style.getPropertyPriority('overflow'),
+        });
+        el.style.setProperty('overflow', 'visible', 'important');
+      }
+      el = el.parentElement;
+    }
+  };
+
+  const geometryOf = (video) => {
+    const box = (video.parentElement || video).getBoundingClientRect();
+    return {
+      videoWidth: video.clientWidth,
+      videoHeight: video.clientHeight,
+      boxWidth: box.width,
+      boxHeight: box.height,
+    };
+  };
+
+  const render = () => {
+    if (!take) return;
+    if (effects.theater && !take.theaterOn) enterTheater();
+    else if (!effects.theater && take.theaterOn) leaveTheater();
+
+    const { transform } = VC.transform.toCss(effects, geometryOf(take.video));
+    if (transform) {
+      take.video.style.setProperty('transform', transform, 'important');
+      openClips();
+    } else {
+      take.video.style.removeProperty('transform');
+      releaseClips();
+    }
+  };
+
+  const restore = () => {
+    if (!take) return;
+    if (take.theaterOn) leaveTheater();
+    releaseClips();
+    restoreStyle(take.video, take.originalVideoStyle);
+    take = null;
+  };
+
+  function apply(patch, video) {
+    const before = effects;
+    const next = { ...effects, ...patch, pan: { ...effects.pan, ...(patch.pan || {}) } };
+    effects = next;
+
+    if (isDefault(next)) {
+      restore();
+    } else {
+      if (!take) {
+        const target = video || VC.videos.pick();
+        if (!target) { effects = before; return; }
+        take = open(target);
+      }
+      render();
+    }
+
+    if (next.theater !== before.theater) {
+      VC.panel.showToast(next.theater ? '🎬 Theater mode' : 'Theater off');
+    }
   }
 
-  const toggleTheater = (video) => {
-    if (theater.active) exit();
-    else enter(video);
-  };
+  const reset = () => apply({ ...DEFAULTS, pan: { x: 0, y: 0 } });
+
+  const toggleTheater = (video) => apply({ theater: !effects.theater }, video);
 
   let autoTheaterDone = false;
 
   const tryAutoTheater = (video) => {
-    if (autoTheaterDone || theater.active) return;
+    if (autoTheaterDone || effects.theater) return;
     if (VC.settings.isDisabledHere()) return;
     if (!VC.settings.shouldAutoTheater()) return;
     const v = video || VC.videos.pick();
     if (!v) return;
     autoTheaterDone = true;
-    enter(v);
+    apply({ theater: true }, v);
   };
 
-  VC.presentation = { toggleTheater, leaveTheater: exit, isTheaterActive: () => theater.active,
-    tryAutoTheater };
+  VC.presentation = {
+    apply,
+    reset,
+    current: () => effects,
+    toggleTheater,
+    leaveTheater: () => apply({ theater: false }),
+    isTheaterActive: () => effects.theater,
+    tryAutoTheater,
+  };
 })();

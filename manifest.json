@@ -29,6 +29,7 @@
       ],
       "js": [
         "src/settings.js",
+        "src/transform.js",
         "src/videos.js",
         "src/presentation.js",
         "src/panel.js",
