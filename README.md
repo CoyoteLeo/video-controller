@@ -4,12 +4,14 @@
   <img src="icons/icon-128.png" alt="Video Controller icon" width="96" height="96" />
 </p>
 
-A minimalist Chrome extension that gives every HTML5 video on the web a consistent, configurable keyboard remote — plus a one-key **Theater Mode** and a domain allowlist that enables it automatically.
+A minimalist Chrome extension that gives every HTML5 video on the web a consistent, configurable keyboard remote — plus one-key **Picture in Picture**, a one-key **Theater Mode**, and a domain allowlist that enables it automatically.
 
 ## Features
 
 - **Seek** forward / backward with any key (default: `→` / `←`)
 - **Volume** up / down with any key (default: `↑` / `↓`)
+- **Play / Pause** and **Mute** with any key (defaults: `Space` / `M`)
+- **Picture in Picture** — toggles Chrome's native floating player, which stays on top across tabs and is resized by dragging its edges (default: `P`). Works even on sites that mark their video `disablePictureInPicture`
 - **Theater Mode** — enlarges the video player to fill the viewport with a black backdrop; custom player controls stay intact (default: `T`)
 - **Auto Theater** — list domains where Theater Mode should activate automatically the moment a video starts playing
 - **Configurable seek step** — 1 to 600 seconds
@@ -46,6 +48,8 @@ Click the toolbar icon to open the panel:
 | --- | --- |
 | Forward / Backward | Key that seeks by the configured step |
 | Volume Up / Down | Key that changes volume by ±10% |
+| Play / Pause, Mute | Keys that toggle playback and audio |
+| Picture in Picture | Key that toggles Chrome's native floating player |
 | Theater Mode | Key that toggles the fullscreen-like overlay |
 | Seek step (seconds) | How much each seek keypress moves the playhead |
 | Auto Theater Mode | One domain per line. Subdomains are matched automatically (e.g. `youtube.com` covers `www.youtube.com`) |
@@ -57,7 +61,7 @@ To rebind a key: click the button, press the key. `Esc` cancels.
 ```
 .
 ├── manifest.json      # MV3 extension manifest
-├── content.js         # keyboard listener, theater overlay, auto-theater
+├── content.js         # keyboard listener, theater overlay, auto-theater, picture-in-picture
 ├── popup.html         # settings panel UI
 ├── popup.js           # settings panel logic
 ├── icons/
