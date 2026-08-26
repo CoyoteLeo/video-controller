@@ -23,32 +23,32 @@
     }, null);
   };
 
-  const broadcastActionToFrames = (action, exceptSource) => {
+  const broadcastActionToFrames = (action, exceptSource, payload) => {
     const frames = window.frames;
     for (let i = 0; i < frames.length; i++) {
       if (frames[i] === exceptSource) continue;
-      try { frames[i].postMessage({ tag: MSG_TAG, type: 'action', action }, '*'); } catch (_) { /* cross-origin */ }
+      try { frames[i].postMessage({ tag: MSG_TAG, type: 'action', action, payload }, '*'); } catch (_) { /* cross-origin */ }
     }
   };
 
-  const bubble = (action) => {
+  const bubble = (action, payload) => {
     if (isTop) return false;
     try {
-      window.parent.postMessage({ tag: MSG_TAG, type: 'action-bubble', action }, '*');
+      window.parent.postMessage({ tag: MSG_TAG, type: 'action-bubble', action, payload }, '*');
       return true;
     } catch (_) {
       return false;
     }
   };
 
-  const routeLocally = (action, exceptSource) => {
+  const routeLocally = (action, exceptSource, payload) => {
     const video = pickVideo();
     if (video) {
-      onAction(action, video, undefined);
+      onAction(action, video, payload);
       return true;
     }
     if (hasDescendantVideo) {
-      broadcastActionToFrames(action, exceptSource);
+      broadcastActionToFrames(action, exceptSource, payload);
       return true;
     }
     return false;
@@ -109,6 +109,8 @@
 
   const findById = (id) => localVideos().find((el) => ids.get(el) === id) || null;
 
+  // A report carries the state of the frame that owns the video, because the
+  // panel lives in the extension and the effects live wherever the video is.
   const describe = (el) => ({
     id: idOf(el),
     width: el.clientWidth,
@@ -116,6 +118,10 @@
     duration: Number.isFinite(el.duration) ? el.duration : 0,
     playing: !el.paused && !el.ended,
     frame: !isTop,
+    rate: el.playbackRate,
+    loop: !!el.loop,
+    effects: VC.presentation.current(),
+    ab: VC.playback.currentRepeat(),
   });
 
   // ---- manual pick -------------------------------------------------------
@@ -163,9 +169,12 @@
   let listCallback = null;
   let collected = [];
 
+  // A sweep refreshes this frame's own entries and keeps what other frames last
+  // reported. Wiping them would make the list blink empty every poll, and on an
+  // iframe player the remote entries are the only ones there are.
   const list = (cb) => {
     listCallback = cb;
-    collected = localVideos().map(describe);
+    upsert(localVideos().map(describe));
     cb(collected);
     broadcast({ type: 'list-request' });
   };
@@ -174,9 +183,16 @@
   // arrived rather than waiting for frames that may never answer.
   const known = () => collected;
 
+  // Replace by id rather than skipping known ones: a report carries the owning
+  // frame's current state, so a second sweep has to be able to update it.
+  const upsert = (items) => {
+    const byId = new Map(collected.map((i) => [i.id, i]));
+    for (const item of items) byId.set(item.id, item);
+    collected = [...byId.values()];
+  };
+
   const addReports = (items) => {
-    const seen = new Set(collected.map((i) => i.id));
-    collected = collected.concat(items.filter((i) => !seen.has(i.id)));
+    upsert(items);
     // Reports trickle in and a cross-origin frame may never answer, so the
     // caller gets what has arrived so far rather than waiting for the tree.
     if (listCallback) listCallback(collected);
@@ -202,8 +218,8 @@
       deliverTargeted({ action, payload, target: pickedId }, null);
       return true;
     }
-    if (routeLocally(action, null)) return true;
-    return ancestorHasVideo && bubble(action);
+    if (routeLocally(action, null, payload)) return true;
+    return ancestorHasVideo && bubble(action, payload);
   };
 
   const start = () => {
@@ -293,14 +309,14 @@
     if (data.type === 'action') {
       if (VC.settings.isDisabledHere()) return;
       if (data.target) deliverTargeted(data, e.source);
-      else routeLocally(data.action, e.source);
+      else routeLocally(data.action, e.source, data.payload);
       return;
     }
 
     if (data.type === 'action-bubble') {
       if (VC.settings.isDisabledHere()) return;
-      if (routeLocally(data.action, e.source)) return;
-      bubble(data.action);
+      if (routeLocally(data.action, e.source, data.payload)) return;
+      bubble(data.action, data.payload);
     }
   };
 

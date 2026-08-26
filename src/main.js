@@ -197,15 +197,31 @@
   // The panel lives in the extension's own document, so it needs the page's
   // state handed to it: what is applied right now, what videos exist, and
   // whether this domain is blocked (it cannot read the hostname itself).
+  // The video may live in a child frame, so the panel's picture of the page comes
+  // from the cross-frame sweep rather than from this frame's own video. On an
+  // iframe player the top frame has no video at all, which is most of the sites
+  // this extension exists for.
+  const currentEntry = () => {
+    const list = VC.videos.known();
+    if (!list.length) return null;
+    const picked = VC.videos.pickedId();
+    return list.find((i) => i.id === picked)
+      || list.find((i) => i.playing)
+      || list.reduce((best, i) => (i.width * i.height > best.width * best.height ? i : best), list[0]);
+  };
+
   const snapshot = () => {
-    const v = VC.videos.pick();
+    const entry = currentEntry();
+    // A report crosses a frame boundary, so treat its shape as untrusted: a frame
+    // running older code, or a report that raced, must not hand the panel an
+    // undefined effects object to dereference.
     return {
       enabled: !VC.settings.isDisabledHere(),
-      hasVideo: !!v,
-      effects: VC.presentation.current(),
-      rate: v ? v.playbackRate : 1,
-      loop: v ? !!v.loop : false,
-      ab: VC.playback.currentRepeat(),
+      hasVideo: !!entry,
+      effects: (entry && entry.effects) || VC.presentation.current(),
+      rate: (entry && entry.rate) || 1,
+      loop: !!(entry && entry.loop),
+      ab: (entry && entry.ab) || null,
       videos: VC.videos.known(),
       picked: VC.videos.pickedId(),
       siteCount: VC.settings.siteCount(),
@@ -233,18 +249,33 @@
     frame: (msg, v) => { if (v) VC.playback.stepFrames(v, msg.frames, msg.fps); },
     theater: (_msg, v) => { if (v) VC.presentation.toggleTheater(v); },
     pip: (_msg, v) => { if (v) togglePip(v); },
-    pick: (msg) => VC.videos.setPicked(msg.id),
-    refresh: () => VC.videos.list(() => {}),
     reset: (_msg, v) => {
       VC.presentation.reset();
       if (v) { VC.playback.setRate(v, 1); VC.playback.setLoop(v, false); }
       VC.playback.clearRepeat();
       abPoints = { a: null, b: null };
     },
-    forget: (msg, v) => {
-      VC.settings.clearSite();
-      commands.reset(msg, v);
-    },
+  };
+
+  // One table for both entry points: a keyboard shortcut and a panel command are
+  // the same thing arriving by different doors, and both are delivered to
+  // whichever frame owns the video.
+  const runCommand = (name, video, payload) => {
+    const run = commands[name];
+    if (run) run(payload || {}, video);
+    else performAction(name, video);
+  };
+
+  // These are the top frame's own business, not the video-owning frame's.
+  const LOCAL_ONLY = new Set(['pick', 'refresh', 'forget']);
+
+  const runLocal = (msg) => {
+    if (msg.name === 'pick') return VC.videos.setPicked(msg.id);
+    if (msg.name === 'refresh') return VC.videos.list(() => {});
+    // Forget clears this frame's stored profile, then asks whichever frame owns
+    // the video to drop what is applied.
+    VC.settings.clearSite();
+    return VC.videos.dispatch('reset', {});
   };
 
   if (isTop) {
@@ -252,8 +283,10 @@
       if (!msg || msg.tag !== MSG_TAG) return undefined;
 
       if (msg.type === 'state') {
-        if (!VC.settings.isDisabledHere()) VC.videos.list(() => {});
+        // Answer with what the last sweep found, then start the next one. Asking
+        // first would read the list before any frame has had time to reply.
         respond(snapshot());
+        if (!VC.settings.isDisabledHere()) VC.videos.list(() => {});
         return true;
       }
 
@@ -261,8 +294,8 @@
         // One gate for everything: a blocked domain runs no command and writes
         // no per-site memory.
         if (!VC.settings.isDisabledHere()) {
-          const run = commands[msg.name];
-          if (run) run(msg, VC.videos.pick());
+          if (LOCAL_ONLY.has(msg.name)) runLocal(msg);
+          else VC.videos.dispatch(msg.name, msg);
         }
         respond(snapshot());
         return true;
@@ -272,7 +305,7 @@
     });
   }
 
-  VC.videos.init({ onAction: performAction });
+  VC.videos.init({ onAction: runCommand });
   VC.videos.start();
   VC.settings.prime(chrome.storage, () => {
     VC.videos.announceIfVideoFound();

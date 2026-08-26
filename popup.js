@@ -34,6 +34,7 @@ let settings = { ...DEFAULTS };
 let openTile = null;
 let listening = null;
 let fps = 30;
+let polls = 0;
 
 const send = (msg) => new Promise((resolve) => {
   if (tabId === null) return resolve(null);
@@ -49,6 +50,7 @@ const send = (msg) => new Promise((resolve) => {
 
 const refresh = async () => {
   state = await send({ type: 'state' });
+  polls += 1;
   render();
 };
 
@@ -216,7 +218,9 @@ const render = () => {
     $('notice').innerHTML = '<div class="notice">Video Controller does not run on this page. Browser pages and the Chrome Web Store are off limits to extensions.</div>';
   } else if (!state.enabled) {
     $('notice').innerHTML = '<div class="notice">Disabled on this site by your <b>block list</b>. Open Settings to remove the domain.</div>';
-  } else if (!state.hasVideo) {
+  } else if (!state.hasVideo && polls > 1) {
+    // Only after a second look: reports from child frames arrive asynchronously,
+    // so the first reply on an iframe player legitimately shows nothing yet.
     $('notice').innerHTML = '<div class="notice">No video detected on this page yet.</div>';
   } else {
     $('notice').innerHTML = '';
