@@ -170,6 +170,10 @@
     broadcast({ type: 'list-request' });
   };
 
+  // What the last sweep turned up. The panel polls, so it reads whatever has
+  // arrived rather than waiting for frames that may never answer.
+  const known = () => collected;
+
   const addReports = (items) => {
     const seen = new Set(collected.map((i) => i.id));
     collected = collected.concat(items.filter((i) => !seen.has(i.id)));
@@ -303,6 +307,6 @@
   VC.videos = {
     init, start, pick: pickVideo, routeLocally, bubble, dispatch,
     hasAncestorVideo: () => ancestorHasVideo, announceIfVideoFound,
-    list, setPicked, pickedId: () => pickedId, findById,
+    list, known, setPicked, pickedId: () => pickedId, findById,
   };
 })();
