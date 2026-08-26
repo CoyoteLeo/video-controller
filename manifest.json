@@ -19,7 +19,8 @@
       "32": "icons/icon-32.png",
       "48": "icons/icon-48.png",
       "128": "icons/icon-128.png"
-    }
+    },
+    "default_popup": "popup.html"
   },
   "content_scripts": [
     {
@@ -32,14 +33,11 @@
         "src/videos.js",
         "src/presentation.js",
         "src/playback.js",
-        "src/panel.js",
+        "src/toast.js",
         "src/main.js"
       ],
       "run_at": "document_start",
       "all_frames": true
     }
-  ],
-  "background": {
-    "service_worker": "background.js"
-  }
+  ]
 }

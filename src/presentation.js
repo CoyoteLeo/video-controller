@@ -249,7 +249,7 @@
     }
 
     if (next.theater !== before.theater) {
-      VC.panel.showToast(next.theater ? '🎬 Theater mode' : 'Theater off');
+      VC.toast.showToast(next.theater ? '🎬 Theater mode' : 'Theater off');
     }
   }
 

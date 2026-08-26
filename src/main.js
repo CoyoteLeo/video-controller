@@ -87,13 +87,13 @@
 
   const togglePip = (video) => {
     if (!document.pictureInPictureEnabled) {
-      VC.panel.showToast('⚠️ PiP unavailable');
+      VC.toast.showToast('⚠️ PiP unavailable');
       return;
     }
     if (document.pictureInPictureElement === video) {
       document.exitPictureInPicture().then(
-        () => VC.panel.showToast('PiP off'),
-        () => VC.panel.showToast('⚠️ PiP exit failed'),
+        () => VC.toast.showToast('PiP off'),
+        () => VC.toast.showToast('⚠️ PiP exit failed'),
       );
       return;
     }
@@ -104,8 +104,8 @@
     metadataReady(video)
       .then(() => video.requestPictureInPicture())
       .then(
-        () => VC.panel.showToast('🖼️ Picture in picture'),
-        () => VC.panel.showToast('⚠️ PiP blocked'),
+        () => VC.toast.showToast('🖼️ Picture in picture'),
+        () => VC.toast.showToast('⚠️ PiP blocked'),
       );
   };
 
@@ -113,17 +113,17 @@
     const step = VC.settings.read().seekSeconds;
     if (action === 'forward') {
       video.currentTime = clamp(video.currentTime + step, 0, video.duration || Infinity);
-      VC.panel.showToast(`⏩ +${step}s  (${formatTime(video.currentTime)})`);
+      VC.toast.showToast(`⏩ +${step}s  (${formatTime(video.currentTime)})`);
     } else if (action === 'backward') {
       video.currentTime = clamp(video.currentTime - step, 0, video.duration || Infinity);
-      VC.panel.showToast(`⏪ -${step}s  (${formatTime(video.currentTime)})`);
+      VC.toast.showToast(`⏪ -${step}s  (${formatTime(video.currentTime)})`);
     } else if (action === 'volumeUp') {
       video.muted = false;
       video.volume = clamp(video.volume + VOLUME_STEP, 0, 1);
-      VC.panel.showToast(`🔊 ${Math.round(video.volume * 100)}%`);
+      VC.toast.showToast(`🔊 ${Math.round(video.volume * 100)}%`);
     } else if (action === 'volumeDown') {
       video.volume = clamp(video.volume - VOLUME_STEP, 0, 1);
-      VC.panel.showToast(`🔉 ${Math.round(video.volume * 100)}%`);
+      VC.toast.showToast(`🔉 ${Math.round(video.volume * 100)}%`);
     } else if (action === 'theater') {
       VC.presentation.toggleTheater(video);
     } else if (action === 'pip') {
@@ -132,22 +132,21 @@
       if (video.paused || video.ended) {
         const p = video.play();
         if (p && typeof p.then === 'function') {
-          p.then(() => VC.panel.showToast('▶️ Play')).catch(() => VC.panel.showToast('⚠️ Play blocked'));
+          p.then(() => VC.toast.showToast('▶️ Play')).catch(() => VC.toast.showToast('⚠️ Play blocked'));
         } else {
-          VC.panel.showToast('▶️ Play');
+          VC.toast.showToast('▶️ Play');
         }
       } else {
         video.pause();
-        VC.panel.showToast('⏸️ Pause');
+        VC.toast.showToast('⏸️ Pause');
       }
     } else if (action === 'mute') {
       video.muted = !video.muted;
-      VC.panel.showToast(video.muted ? '🔇 Muted' : `🔊 ${Math.round(video.volume * 100)}%`);
+      VC.toast.showToast(video.muted ? '🔇 Muted' : `🔊 ${Math.round(video.volume * 100)}%`);
     }
   };
 
   const handler = (e) => {
-    if (VC.panel.isCapturing()) return;
     if (e.ctrlKey || e.metaKey || e.altKey) return;
     if (isTypingTarget(e.target)) return;
 
@@ -179,8 +178,10 @@
   };
 
   const siteDefaults = () => ({
-    ...VC.transform.DEFAULT_EFFECTS, rate: 1, loop: false, panelX: null, panelY: null,
+    ...VC.transform.DEFAULT_EFFECTS, rate: 1, loop: false,
   });
+
+  const remember = (key, value) => VC.settings.setSiteValue(key, value, siteDefaults());
 
   const applyRemembered = () => {
     if (VC.settings.isDisabledHere()) return;
@@ -193,20 +194,80 @@
     if (stored.loop) VC.playback.setLoop(v, true);
   };
 
-  // The toolbar icon has no popup, so clicking it reaches here through the
-  // background worker. This is the only thing the extension page needs from the
-  // content script.
+  // The panel lives in the extension's own document, so it needs the page's
+  // state handed to it: what is applied right now, what videos exist, and
+  // whether this domain is blocked (it cannot read the hostname itself).
+  const snapshot = () => {
+    const v = VC.videos.pick();
+    return {
+      enabled: !VC.settings.isDisabledHere(),
+      hasVideo: !!v,
+      effects: VC.presentation.current(),
+      rate: v ? v.playbackRate : 1,
+      loop: v ? !!v.loop : false,
+      ab: VC.playback.currentRepeat(),
+      videos: VC.videos.known(),
+      picked: VC.videos.pickedId(),
+      siteCount: VC.settings.siteCount(),
+    };
+  };
+
+  const applyEffect = (patch) => {
+    VC.presentation.apply(patch);
+    const e = VC.presentation.current();
+    for (const key of Object.keys(patch)) remember(key, e[key]);
+  };
+
+  let abPoints = { a: null, b: null };
+
+  const commands = {
+    effect: (msg) => applyEffect(msg.patch),
+    rate: (msg, v) => { if (v) remember('rate', VC.playback.setRate(v, msg.value)); },
+    loop: (_msg, v) => { if (v) { VC.playback.setLoop(v, !v.loop); remember('loop', v.loop); } },
+    ab: (msg, v) => {
+      if (!v) return;
+      if (msg.point === 'clear') { abPoints = { a: null, b: null }; VC.playback.clearRepeat(); return; }
+      abPoints = { ...abPoints, [msg.point]: v.currentTime };
+      VC.playback.setRepeat(v, abPoints.a, abPoints.b);
+    },
+    frame: (msg, v) => { if (v) VC.playback.stepFrames(v, msg.frames, msg.fps); },
+    theater: (_msg, v) => { if (v) VC.presentation.toggleTheater(v); },
+    pip: (_msg, v) => { if (v) togglePip(v); },
+    pick: (msg) => VC.videos.setPicked(msg.id),
+    refresh: () => VC.videos.list(() => {}),
+    reset: (_msg, v) => {
+      VC.presentation.reset();
+      if (v) { VC.playback.setRate(v, 1); VC.playback.setLoop(v, false); }
+      VC.playback.clearRepeat();
+      abPoints = { a: null, b: null };
+    },
+    forget: (msg, v) => {
+      VC.settings.clearSite();
+      commands.reset(msg, v);
+    },
+  };
+
   if (isTop) {
     chrome.runtime.onMessage.addListener((msg, _sender, respond) => {
       if (!msg || msg.tag !== MSG_TAG) return undefined;
-      if (msg.type === 'open-panel') {
-        // Opens even on a blocked domain, in settings-only mode. The popup is
-        // gone, so refusing outright would leave no way to un-block the site
-        // from the page it applies to.
-        VC.panel.open(VC.settings.isDisabledHere() ? 'settings' : 'full');
-        respond({ ok: true });
+
+      if (msg.type === 'state') {
+        if (!VC.settings.isDisabledHere()) VC.videos.list(() => {});
+        respond(snapshot());
         return true;
       }
+
+      if (msg.type === 'command') {
+        // One gate for everything: a blocked domain runs no command and writes
+        // no per-site memory.
+        if (!VC.settings.isDisabledHere()) {
+          const run = commands[msg.name];
+          if (run) run(msg, VC.videos.pick());
+        }
+        respond(snapshot());
+        return true;
+      }
+
       return undefined;
     });
   }

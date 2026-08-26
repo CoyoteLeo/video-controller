@@ -9,7 +9,7 @@
     "url": "git+https://github.com/CoyoteLeo/video-controller.git"
   },
   "scripts": {
-    "zip": "rm -f video-controller.zip && zip -r video-controller.zip manifest.json background.js src icons -x 'icons/icon.svg'",
+    "zip": "rm -f video-controller.zip && zip -r video-controller.zip manifest.json src popup.html popup.js icons -x 'icons/icon.svg'",
     "icons": "rsvg-convert -w 16 -h 16 icons/icon.svg -o icons/icon-16.png && rsvg-convert -w 32 -h 32 icons/icon.svg -o icons/icon-32.png && rsvg-convert -w 48 -h 48 icons/icon.svg -o icons/icon-48.png && rsvg-convert -w 128 -h 128 icons/icon.svg -o icons/icon-128.png",
     "test": "node --test"
   }
