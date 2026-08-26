@@ -32,6 +32,7 @@
         "src/transform.js",
         "src/videos.js",
         "src/presentation.js",
+        "src/playback.js",
         "src/panel.js",
         "src/main.js"
       ],
