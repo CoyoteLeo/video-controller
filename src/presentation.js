@@ -39,9 +39,17 @@
 
   const captureStyle = (el) => el.getAttribute('style');
 
+  // Touching el.style at all materialises a style attribute, and CSSOM leaves an
+  // empty one behind after the last property is removed. An element that started
+  // without the attribute has to end without it, so this is the one place that
+  // decides what "no inline style" means.
   const restoreStyle = (el, original) => {
-    if (original === null) el.removeAttribute('style');
-    else el.setAttribute('style', original);
+    if (original !== null) {
+      el.setAttribute('style', original);
+      return;
+    }
+    el.removeAttribute('style');
+    if (el.getAttribute('style') === '') el.removeAttribute('style');
   };
 
   const open = (video) => ({
@@ -156,9 +164,13 @@
   // to be opened up. Each one's own inline value is recorded, so releasing puts
   // back "no inline overflow at all" rather than writing `visible` over it.
   const releaseClips = () => {
-    for (const { el, value, priority } of take.clipped) {
+    for (const { el, value, priority, hadAttr } of take.clipped) {
       if (value) el.style.setProperty('overflow', value, priority);
       else el.style.removeProperty('overflow');
+      // removeProperty leaves an empty style="" behind. An element that had no
+      // style attribute at all must not gain one, or the page does not come back
+      // byte-for-byte and selectors like :not([style]) change meaning.
+      if (!hadAttr && !el.getAttribute('style')) el.removeAttribute('style');
     }
     take.clipped = [];
   };
@@ -173,6 +185,7 @@
           el,
           value: el.style.getPropertyValue('overflow'),
           priority: el.style.getPropertyPriority('overflow'),
+          hadAttr: el.hasAttribute('style'),
         });
         el.style.setProperty('overflow', 'visible', 'important');
       }
@@ -201,6 +214,9 @@
       openClips();
     } else {
       take.video.style.removeProperty('transform');
+      if (take.originalVideoStyle === null && !take.video.getAttribute('style')) {
+        take.video.removeAttribute('style');
+      }
       releaseClips();
     }
   };
@@ -210,6 +226,9 @@
     if (take.theaterOn) leaveTheater();
     releaseClips();
     restoreStyle(take.video, take.originalVideoStyle);
+    if (take.originalVideoStyle === null && take.video.getAttribute('style') === '') {
+      take.video.removeAttribute('style');
+    }
     take = null;
   };
 
