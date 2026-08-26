@@ -61,7 +61,12 @@ To rebind a key: click the button, press the key. `Esc` cancels.
 ```
 .
 ├── manifest.json      # MV3 extension manifest
-├── content.js         # keyboard listener, theater overlay, auto-theater, picture-in-picture
+├── src/
+│   ├── settings.js     # defaults, storage, per-domain rules
+│   ├── videos.js       # video discovery and cross-frame routing
+│   ├── presentation.js # owns the player's inline style; theater overlay
+│   ├── panel.js        # toast
+│   └── main.js         # keyboard listener, action dispatch, wiring
 ├── popup.html         # settings panel UI
 ├── popup.js           # settings panel logic
 ├── icons/
