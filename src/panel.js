@@ -72,6 +72,30 @@
         ul.videos li { margin-bottom: 4px; }
         ul.videos button { width: 100%; text-align: left; }
         .empty { opacity: 0.6; font-size: 12px; }
+        .tabs { display: flex; gap: 2px; padding: 0 10px; border-bottom: 1px solid rgba(128,128,128,0.25); }
+        .tab {
+          padding: 6px 9px; border: 0; background: transparent; color: inherit; font: inherit;
+          cursor: pointer; border-bottom: 2px solid transparent; opacity: 0.6;
+        }
+        .tab.active { opacity: 1; border-bottom-color: #0a7; font-weight: 600; }
+        .key-btn {
+          min-width: 88px; padding: 4px 8px; border-radius: 4px; cursor: pointer; font: inherit;
+          border: 1px solid rgba(128,128,128,0.5); background: transparent; color: inherit; text-align: center;
+        }
+        .key-btn.listening { border-color: #0a7; background: rgba(0,170,119,0.12); }
+        textarea {
+          width: 100%; min-height: 54px; padding: 5px 7px; border-radius: 4px; resize: vertical;
+          border: 1px solid rgba(128,128,128,0.5); background: transparent; color: inherit;
+          font: 11px/1.4 ui-monospace, Menlo, monospace;
+        }
+        textarea:focus { outline: none; border-color: #0a7; }
+        .actions { display: flex; gap: 6px; margin-top: 10px; }
+        .actions button { flex: 1; }
+        button.primary {
+          padding: 5px 9px; border-radius: 4px; cursor: pointer; font: inherit;
+          border: 1px solid #0a7; background: #0a7; color: #fff;
+        }
+        .status { min-height: 14px; margin-top: 6px; font-size: 11px; color: #0a7; text-align: center; }
       </style>
       <div class="toast" part="toast"></div>
       <div class="panel"></div>
@@ -127,6 +151,10 @@
         <span class="title">Video Controller</span>
         <button class="close" aria-label="Close panel">✕</button>
       </header>
+      <div class="tabs">
+        <button class="tab" data-tab="page">This page</button>
+        <button class="tab" data-tab="settings">Settings</button>
+      </div>
       <div class="body"></div>
     `;
     panelEl.querySelector('.close').addEventListener('click', close);
@@ -162,6 +190,22 @@
 
   const render = () => {
     if (!built) return;
+    for (const el of panelEl.querySelectorAll('.tab')) {
+      el.classList.toggle('active', el.dataset.tab === tab);
+    }
+    if (tab === 'settings') { renderSettings(); return; }
+    if (openMode === 'settings') { renderBlocked(); return; }
+    renderControls();
+  };
+
+  const renderBlocked = () => {
+    panelEl.querySelector('.body').innerHTML = `
+      <div class="empty">Video Controller is disabled on this site, so there is nothing to
+      control here. Remove the domain from the Block List under Settings to enable it.</div>
+    `;
+  };
+
+  const renderControls = () => {
     const e = VC.presentation.current();
     const v = target();
     const rate = v ? v.playbackRate : 1;
@@ -244,7 +288,64 @@
     renderVideos();
   };
 
+  const PRETTY = {
+    ArrowLeft: '←', ArrowRight: '→', ArrowUp: '↑', ArrowDown: '↓', ' ': 'Space', Escape: 'Esc',
+  };
+  const prettyKey = (k) => (!k ? '—' : (PRETTY[k] || (k.length === 1 ? k.toUpperCase() : k)));
+
+  const BINDINGS = [
+    ['forward', 'Forward'], ['backward', 'Backward'],
+    ['volumeUp', 'Volume up'], ['volumeDown', 'Volume down'],
+    ['theater', 'Theater mode'], ['playPause', 'Play / pause'],
+    ['mute', 'Mute'], ['pip', 'Picture in picture'],
+  ];
+
+  const normalizeDomain = (raw) => (raw || '').trim().toLowerCase()
+    .replace(/^https?:\/\//, '').replace(/\/.*$/, '').replace(/^\./, '');
+
+  const parseDomains = (text) => Array.from(new Set(
+    (text || '').split(/[\r\n,]+/).map(normalizeDomain).filter(Boolean)));
+
+  const renderSettings = () => {
+    const s = VC.settings.read();
+    panelEl.querySelector('.body').innerHTML = `
+      <div class="section-title">Shortcuts</div>
+      ${BINDINGS.map(([action, label]) => `
+        <div class="row">
+          <span class="label">${label}</span>
+          <button class="key-btn ${capturing === action ? 'listening' : ''}" data-bind="${action}">${capturing === action ? 'Press a key…' : prettyKey(s[action])}</button>
+        </div>`).join('')}
+      <div class="note">Click a binding, then press a key. Esc cancels.</div>
+
+      <div class="row" style="margin-top:10px">
+        <span class="label">Seek step (seconds)</span>
+        <input type="number" data-set="seekSeconds" min="1" max="600" step="1" value="${s.seekSeconds}">
+      </div>
+
+      <div class="section">
+        <div class="section-title">Auto theater</div>
+        <textarea data-set="autoTheaterDomains" placeholder="One domain per line">${(s.autoTheaterDomains || []).join('\n')}</textarea>
+        <div class="note">Theater mode starts automatically on these domains. Subdomains are matched.</div>
+      </div>
+
+      <div class="section">
+        <div class="section-title">Block list</div>
+        <textarea data-set="disabledDomains" placeholder="One domain per line">${(s.disabledDomains || []).join('\n')}</textarea>
+        <div class="note">Everything is disabled on these domains — shortcuts and this panel's controls both.</div>
+      </div>
+
+      <div class="actions">
+        <button class="act" data-act="settings-reset">Reset</button>
+        <button class="primary" data-act="settings-save">Save</button>
+      </div>
+      <div class="status"></div>
+    `;
+  };
+
   let fps = VC.playback.DEFAULT_FPS;
+  let tab = 'page';
+  let openMode = 'full';
+  let capturing = null;
   let videoList = [];
 
   const renderVideos = () => {
@@ -269,6 +370,21 @@
   const PAN_STEP = 20;
 
   const onClick = (e) => {
+    const tabBtn = e.target.closest('[data-tab]');
+    if (tabBtn) {
+      tab = tabBtn.dataset.tab;
+      capturing = null;
+      render();
+      return;
+    }
+
+    const bind = e.target.closest('[data-bind]');
+    if (bind) {
+      capturing = capturing === bind.dataset.bind ? null : bind.dataset.bind;
+      render();
+      return;
+    }
+
     const pick = e.target.closest('[data-pick]');
     if (pick) {
       VC.videos.setPicked(pick.dataset.pick);
@@ -310,6 +426,11 @@
         if (v) VC.playback.setRate(v, 1);
         render();
         break;
+      case 'settings-save': saveSettings(); break;
+      case 'settings-reset':
+        VC.settings.save({ ...VC.settings.DEFAULTS });
+        setTimeout(render, 60);
+        break;
       case 'reset':
         VC.presentation.reset();
         if (v) { VC.playback.setRate(v, 1); VC.playback.setLoop(v, false); }
@@ -334,12 +455,48 @@
     }
   };
 
-  const open = () => {
+  const saveSettings = () => {
+    const body = panelEl.querySelector('.body');
+    const secs = Number(body.querySelector('[data-set="seekSeconds"]').value);
+    VC.settings.save({
+      seekSeconds: Number.isFinite(secs) && secs > 0
+        ? Math.min(600, Math.floor(secs)) : VC.settings.DEFAULTS.seekSeconds,
+      autoTheaterDomains: parseDomains(body.querySelector('[data-set="autoTheaterDomains"]').value),
+      disabledDomains: parseDomains(body.querySelector('[data-set="disabledDomains"]').value),
+    });
+    const status = body.querySelector('.status');
+    if (status) status.textContent = 'Saved';
+    setTimeout(() => { if (status) status.textContent = ''; }, 1200);
+  };
+
+  // While a binding is being captured the shortcut handler must stand down, or
+  // pressing `t` to rebind it would toggle theater instead.
+  const onCaptureKey = (e) => {
+    if (!capturing) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    if (e.key === 'Escape') { capturing = null; render(); return; }
+    if (['Shift', 'Control', 'Alt', 'Meta'].includes(e.key)) return;
+    const patch = { [capturing]: e.key };
+    // A key can only mean one thing, so taking it clears it from anywhere else.
+    const current = VC.settings.read();
+    for (const [action] of BINDINGS) {
+      if (action !== capturing && current[action] === e.key) patch[action] = '';
+    }
+    VC.settings.save(patch);
+    capturing = null;
+    setTimeout(render, 60);
+  };
+
+  const open = (mode) => {
+    openMode = mode === 'settings' ? 'settings' : 'full';
+    if (openMode === 'settings') tab = 'settings';
     ensureHost();
     if (!built) {
       build();
       panelEl.addEventListener('click', onClick);
       panelEl.addEventListener('input', onInput);
+      window.addEventListener('keydown', onCaptureKey, true);
     }
     const stored = VC.settings.readSite(siteDefaults());
     if (stored.panelX !== null && stored.panelY !== null) {
@@ -358,5 +515,5 @@
 
   const isOpen = () => !!panelEl && panelEl.classList.contains('open');
 
-  VC.panel = { showToast, open, close, isOpen, render, refreshVideos };
+  VC.panel = { showToast, open, close, isOpen, render, refreshVideos, isCapturing: () => !!capturing };
 })();

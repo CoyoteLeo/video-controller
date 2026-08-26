@@ -42,6 +42,7 @@
 
   let siteProfiles = {};
   let localStore = null;
+  let syncStore = null;
 
   // Values can be objects (pan), so compare by shape rather than identity.
   const sameValue = (a, b) => JSON.stringify(a) === JSON.stringify(b);
@@ -73,6 +74,13 @@
     if (localStore) localStore.set({ siteProfiles });
   };
 
+  // The panel is the only UI now, so the global settings need a write path here
+  // too. The onChanged listener below is what refreshes the cached snapshot, so
+  // this does not have to.
+  const save = (patch) => {
+    if (syncStore) syncStore.set(patch);
+  };
+
   const clearSite = () => {
     const next = { ...siteProfiles };
     delete next[siteHost()];
@@ -86,6 +94,7 @@
   // there would change shortcut latency.
   const prime = (storage, onReady) => {
     localStore = storage.local;
+    syncStore = storage.sync;
     let pending = 2;
     const done = () => { if (--pending === 0 && onReady) onReady(); };
     storage.sync.get(DEFAULTS, (stored) => {
@@ -108,6 +117,6 @@
 
   VC.settings = {
     DEFAULTS, read, matchHost, shouldAutoTheater, isDisabledHere, prime,
-    resolve, nextProfiles, readSite, setSiteValue, clearSite, siteCount,
+    resolve, nextProfiles, readSite, setSiteValue, clearSite, siteCount, save,
   };
 })();

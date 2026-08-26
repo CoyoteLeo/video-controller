@@ -12,7 +12,7 @@ A minimalist Chrome extension that gives every HTML5 video on the web a consiste
 - **Volume** up / down with any key (default: `↑` / `↓`)
 - **Play / Pause** and **Mute** with any key (defaults: `Space` / `M`)
 - **Picture in Picture** — toggles Chrome's native floating player, which stays on top across tabs and is resized by dragging its edges (default: `P`). Works even on sites that mark their video `disablePictureInPicture`
-- **Control panel** — an in-page panel (opened from the toolbar popup) for rotate, flip, zoom, pan, speed, loop, A-B repeat and frame stepping. Frame stepping is approximate: the API does not expose a video's real frame rate
+- **Control panel** — click the toolbar icon and the panel opens on the page: rotate, flip, zoom, pan, speed, loop, A-B repeat, frame stepping, the video picker, and every setting. Frame stepping is approximate: the API does not expose a video's real frame rate
 - **Video picker** — on a page with several videos, choose which one the controls and the keyboard shortcuts act on, including videos inside cross-origin iframes
 - **Per-site memory** — panel settings are remembered automatically for the exact hostname you set them on, and cleared from the panel's own button
 - **Theater Mode** — enlarges the video player to fill the viewport with a black backdrop; custom player controls stay intact (default: `T`)
@@ -45,7 +45,8 @@ Upload the resulting `video-controller.zip` to the Chrome Web Store Developer Da
 
 ## Configuration
 
-Click the toolbar icon to open the panel:
+Click the toolbar icon. The panel opens on the page with two tabs — **This page** for
+live controls, **Settings** for everything global:
 
 | Setting | Description |
 | --- | --- |
@@ -53,12 +54,14 @@ Click the toolbar icon to open the panel:
 | Volume Up / Down | Key that changes volume by ±10% |
 | Play / Pause, Mute | Keys that toggle playback and audio |
 | Picture in Picture | Key that toggles Chrome's native floating player |
-| Open control panel | Opens the in-page panel on the current tab. Disabled on blocked domains |
 | Theater Mode | Key that toggles the fullscreen-like overlay |
 | Seek step (seconds) | How much each seek keypress moves the playhead |
 | Auto Theater Mode | One domain per line. Subdomains are matched automatically (e.g. `youtube.com` covers `www.youtube.com`) |
 
-To rebind a key: click the button, press the key. `Esc` cancels.
+To rebind a key: open **Settings** in the panel, click the binding, press the key. `Esc` cancels.
+
+On a domain in the block list the panel still opens, but only on the Settings tab — otherwise
+there would be no way to un-block a site from the page it applies to.
 
 ## Project Structure
 
@@ -71,10 +74,9 @@ To rebind a key: click the button, press the key. `Esc` cancels.
 │   ├── videos.js       # video discovery, ids, cross-frame routing
 │   ├── presentation.js # owns the player's inline style; theater is one effect
 │   ├── playback.js     # speed, loop, A-B repeat, frame step
-│   ├── panel.js        # shadow-root UI: toast layer and panel layer
+│   ├── panel.js        # the whole UI: toast layer and panel layer in a shadow root
 │   └── main.js         # keyboard listener, action dispatch, wiring
-├── popup.html         # settings panel UI
-├── popup.js           # settings panel logic
+├── background.js      # opens the panel when the toolbar icon is clicked
 ├── icons/
 │   ├── icon.svg       # source
 │   ├── icon-16.png
@@ -94,7 +96,7 @@ No build step — load the folder directly into Chrome. The pure layers have tes
 ```bash
 npm test   # node --test, no dependencies
 ```
- Settings are persisted via `chrome.storage.sync`, so changes in the popup propagate to every open tab without a reload.
+ Global settings are persisted via `chrome.storage.sync`, so a change made in one tab's panel propagates to every open tab without a reload. Per-site memory lives in `chrome.storage.local`.
 
 Regenerate PNG icons from the SVG source:
 

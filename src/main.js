@@ -147,6 +147,7 @@
   };
 
   const handler = (e) => {
+    if (VC.panel.isCapturing()) return;
     if (e.ctrlKey || e.metaKey || e.altKey) return;
     if (isTypingTarget(e.target)) return;
 
@@ -192,20 +193,17 @@
     if (stored.loop) VC.playback.setLoop(v, true);
   };
 
-  // The popup cannot read the tab's hostname without a permission we do not
-  // want, so it asks the frame that has it for free. Answer only the one thing
-  // it needs: video presence is the panel's business and it tracks that live.
+  // The toolbar icon has no popup, so clicking it reaches here through the
+  // background worker. This is the only thing the extension page needs from the
+  // content script.
   if (isTop) {
     chrome.runtime.onMessage.addListener((msg, _sender, respond) => {
       if (!msg || msg.tag !== MSG_TAG) return undefined;
-      if (msg.type === 'availability') {
-        respond({ enabled: !VC.settings.isDisabledHere() });
-        return true;
-      }
       if (msg.type === 'open-panel') {
-        // Idempotent: an already-open panel stays open. It closes from its own
-        // button, not from the popup.
-        if (!VC.settings.isDisabledHere()) VC.panel.open();
+        // Opens even on a blocked domain, in settings-only mode. The popup is
+        // gone, so refusing outright would leave no way to un-block the site
+        // from the page it applies to.
+        VC.panel.open(VC.settings.isDisabledHere() ? 'settings' : 'full');
         respond({ ok: true });
         return true;
       }
