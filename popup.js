@@ -57,6 +57,14 @@ const run = async (name, extra = {}) => {
   render();
 };
 
+// Dragging a slider fires input continuously. Re-rendering on each one replaces
+// the very element being dragged, which drops the drag after a pixel — so live
+// changes update the numbers in place and leave the DOM alone.
+const runLive = async (name, extra = {}) => {
+  state = await send({ type: 'command', name, ...extra });
+  syncValues();
+};
+
 // ---- tiles -----------------------------------------------------------------
 const TILES = [
   { id: 'rotate', glyph: '⟳', label: 'Rotate' },
@@ -93,7 +101,7 @@ const isActive = (id) => {
 const renderGrid = () => {
   const usable = !!state && state.enabled;
   $('grid').innerHTML = TILES.map((t) => `
-    <button class="tile ${isActive(t.id) ? 'active' : ''} ${openTile === t.id ? 'active' : ''}"
+    <button class="tile ${isActive(t.id) ? 'active' : ''} ${openTile === t.id ? 'open' : ''}"
             data-tile="${t.id}" ${usable ? '' : 'disabled'}>
       <span class="glyph">${t.glyph}</span><span>${t.label}</span>
     </button>
@@ -108,23 +116,26 @@ const detailFor = (id) => {
       <div class="row">
         <button class="act" data-do="rot-ccw">⟲ 90°</button>
         <button class="act" data-do="rot-cw">⟳ 90°</button>
-        <span class="val">${fmt(e.rotate, 0)}°</span>
+        <span class="val" data-val="rotate">${fmt(e.rotate, 0)}°</span>
       </div>
       <div class="row">
         <span class="label">Angle</span>
         <input type="range" data-live="rotate" min="0" max="359" step="1" value="${e.rotate % 360}">
+        <button class="act" data-do="reset-rotate" title="Reset rotation">⟲</button>
       </div>`;
     case 'flip': return `
       <h2>Flip</h2>
       <div class="row">
         <button class="act ${e.flipX ? 'on' : ''}" data-do="flip-x">Horizontal</button>
         <button class="act ${e.flipY ? 'on' : ''}" data-do="flip-y">Vertical</button>
+        <button class="act" data-do="reset-flip" title="Reset flip">⟲</button>
       </div>`;
     case 'zoom': return `
       <h2>Zoom</h2>
       <div class="row">
         <input type="range" data-live="zoom" min="0.25" max="4" step="0.05" value="${e.zoom}">
-        <span class="val">${fmt(e.zoom)}×</span>
+        <span class="val" data-val="zoom">${fmt(e.zoom)}×</span>
+        <button class="act" data-do="reset-zoom" title="Reset zoom">⟲</button>
       </div>`;
     case 'pan': return `
       <h2>Pan</h2>
@@ -133,13 +144,15 @@ const detailFor = (id) => {
         <button class="act" data-do="pan-right">→</button>
         <button class="act" data-do="pan-up">↑</button>
         <button class="act" data-do="pan-down">↓</button>
-        <span class="val">${e.pan.x},${e.pan.y}</span>
+        <span class="val" data-val="pan">${e.pan.x},${e.pan.y}</span>
+        <button class="act" data-do="reset-pan" title="Reset pan">⟲</button>
       </div>`;
     case 'speed': return `
       <h2>Speed</h2>
       <div class="row">
         <input type="range" data-live="rate" min="0.25" max="4" step="0.05" value="${state.rate}">
-        <span class="val">${fmt(state.rate)}×</span>
+        <span class="val" data-val="rate">${fmt(state.rate)}×</span>
+        <button class="act" data-do="reset-rate" title="Reset speed">⟲</button>
       </div>
       <div class="hint">Beyond 4× is still reachable by keyboard; Chrome refuses past 16×.</div>`;
     case 'ab': return `
@@ -169,6 +182,30 @@ const detailFor = (id) => {
       <div class="hint">Picking one also points the keyboard shortcuts at it.</div>`;
     default: return '';
   }
+};
+
+const VALUE_TEXT = {
+  rotate: (s) => `${fmt(s.effects.rotate, 0)}°`,
+  zoom: (s) => `${fmt(s.effects.zoom)}×`,
+  rate: (s) => `${fmt(s.rate)}×`,
+  pan: (s) => `${s.effects.pan.x},${s.effects.pan.y}`,
+};
+
+const syncValues = () => {
+  if (!state) return;
+  for (const el of document.querySelectorAll('[data-val]')) {
+    const f = VALUE_TEXT[el.dataset.val];
+    if (f) el.textContent = f(state);
+  }
+  for (const tile of document.querySelectorAll('[data-tile]')) {
+    tile.classList.toggle('active', isActive(tile.dataset.tile));
+    tile.classList.toggle('open', openTile === tile.dataset.tile);
+  }
+  const count = state.siteCount;
+  $('memory').textContent = count
+    ? `${count} setting${count > 1 ? 's' : ''} remembered here`
+    : 'Nothing remembered for this site';
+  $('forget').disabled = !count;
 };
 
 const render = () => {
@@ -324,6 +361,11 @@ document.addEventListener('click', async (ev) => {
     case 'ab-a': return run('ab', { point: 'a' });
     case 'ab-b': return run('ab', { point: 'b' });
     case 'ab-clear': return run('ab', { point: 'clear' });
+    case 'reset-rotate': return run('effect', { patch: { rotate: 0 } });
+    case 'reset-flip': return run('effect', { patch: { flipX: false, flipY: false } });
+    case 'reset-zoom': return run('effect', { patch: { zoom: 1 } });
+    case 'reset-pan': return run('effect', { patch: { pan: { x: 0, y: 0 } } });
+    case 'reset-rate': return run('rate', { value: 1 });
     case 'frame-back': return run('frame', { frames: -1, fps });
     case 'frame-fwd': return run('frame', { frames: 1, fps });
     default: return undefined;
@@ -335,9 +377,9 @@ document.addEventListener('input', (ev) => {
   if (!el) return;
   const value = Number(el.value);
   switch (el.dataset.live) {
-    case 'rotate': return run('effect', { patch: { rotate: value } });
-    case 'zoom': return run('effect', { patch: { zoom: value } });
-    case 'rate': return run('rate', { value });
+    case 'rotate': return runLive('effect', { patch: { rotate: value } });
+    case 'zoom': return runLive('effect', { patch: { zoom: value } });
+    case 'rate': return runLive('rate', { value });
     case 'fps': fps = Math.min(240, Math.max(1, value || 30)); return undefined;
     default: return undefined;
   }
