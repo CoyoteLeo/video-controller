@@ -7,6 +7,7 @@
     theater: 't',
     playPause: ' ',
     mute: 'm',
+    pip: 'p',
     seekSeconds: 5,
     autoTheaterDomains: [],
     disabledDomains: ['netflix.com', 'youtube.com'],
@@ -121,6 +122,7 @@
     if (eventMatches(e, settings.theater)) return 'theater';
     if (eventMatches(e, settings.playPause)) return 'playPause';
     if (eventMatches(e, settings.mute)) return 'mute';
+    if (eventMatches(e, settings.pip)) return 'pip';
     return null;
   };
 
@@ -272,6 +274,44 @@
     else enter(video);
   };
 
+  const METADATA_TIMEOUT_MS = 3000;
+
+  // MSE players (blob: src) sit at HAVE_NOTHING until playback starts, and
+  // Chrome refuses picture-in-picture on a video with no metadata. Starting
+  // playback loads it well inside the keydown's transient activation window.
+  const metadataReady = (video) => {
+    if (video.readyState > 0) return Promise.resolve();
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('metadata timeout')), METADATA_TIMEOUT_MS);
+      video.addEventListener('loadedmetadata', () => { clearTimeout(timer); resolve(); }, { once: true });
+      video.play().catch(reject);
+    });
+  };
+
+  const togglePip = (video) => {
+    if (!document.pictureInPictureEnabled) {
+      showToast('⚠️ PiP unavailable');
+      return;
+    }
+    if (document.pictureInPictureElement === video) {
+      document.exitPictureInPicture().then(
+        () => showToast('PiP off'),
+        () => showToast('⚠️ PiP exit failed'),
+      );
+      return;
+    }
+    // Sites opt out by marking the element; the attribute owns that flag, so
+    // clearing it is enough for the IDL property to follow.
+    video.removeAttribute('disablePictureInPicture');
+    if (theater.active) exit();
+    metadataReady(video)
+      .then(() => video.requestPictureInPicture())
+      .then(
+        () => showToast('🖼️ Picture in picture'),
+        () => showToast('⚠️ PiP blocked'),
+      );
+  };
+
   const performAction = (action, video) => {
     const step = settings.seekSeconds;
     if (action === 'forward') {
@@ -289,6 +329,8 @@
       showToast(`🔉 ${Math.round(video.volume * 100)}%`);
     } else if (action === 'theater') {
       toggleTheater(video);
+    } else if (action === 'pip') {
+      togglePip(video);
     } else if (action === 'playPause') {
       if (video.paused || video.ended) {
         const p = video.play();

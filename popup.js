@@ -6,12 +6,13 @@ const DEFAULTS = {
   theater: 't',
   playPause: ' ',
   mute: 'm',
+  pip: 'p',
   seekSeconds: 5,
   autoTheaterDomains: [],
   disabledDomains: ['netflix.com', 'youtube.com'],
 };
 
-const ACTIONS = ['forward', 'backward', 'volumeUp', 'volumeDown', 'theater', 'playPause', 'mute'];
+const ACTIONS = ['forward', 'backward', 'volumeUp', 'volumeDown', 'theater', 'playPause', 'mute', 'pip'];
 
 const prettyKey = (k) => {
   if (!k) return '—';
