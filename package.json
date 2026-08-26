@@ -1,6 +1,6 @@
 {
   "name": "video-controller",
-  "version": "1.7.0",
+  "version": "2.0.0",
   "description": "Configurable keyboard controls for any HTML5 video: play/pause, mute, seek, adjust volume, picture-in-picture, theater mode, and per-domain auto-theater.",
   "private": true,
   "license": "MIT",

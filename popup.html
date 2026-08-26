@@ -111,10 +111,27 @@
       resize: vertical;
     }
     textarea:focus { outline: none; border-color: #0a7; }
+    .panel-open {
+      width: 100%;
+      margin-bottom: 10px;
+      padding: 8px 10px;
+      border-radius: 4px;
+      font: inherit;
+      cursor: pointer;
+      border: 1px solid #0a7;
+      background: rgba(0, 170, 119, 0.1);
+      color: inherit;
+    }
+    .panel-open:hover:not(:disabled) { background: rgba(0, 170, 119, 0.2); }
+    .panel-open:disabled { border-color: #bbb; background: transparent; cursor: default; opacity: 0.7; }
+    .panel-note { font-size: 11px; color: #888; margin: -6px 0 10px; min-height: 14px; }
   </style>
 </head>
 <body>
   <h1>Video Controller</h1>
+
+  <button class="panel-open" id="openPanel" disabled>Checking this page…</button>
+  <div class="panel-note" id="panelNote"></div>
 
   <div class="row">
     <label for="keyForward">Forward</label>

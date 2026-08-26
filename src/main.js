@@ -2,6 +2,8 @@
   const VC = (globalThis.__videoController ??= {});
 
   const VOLUME_STEP = 0.1;
+  const MSG_TAG = '__video_controller_v1__';
+  const isTop = window === window.top;
 
   // Only inputs that accept typed text should suppress shortcuts. Non-text
   // controls like a player's <input type="range"> seek bar grab focus when
@@ -160,13 +162,9 @@
     const action = matchAction(e);
     if (!action) return;
 
-    if (VC.videos.routeLocally(action, null)) {
-      e.preventDefault();
-      e.stopImmediatePropagation();
-      return;
-    }
-
-    if (VC.videos.hasAncestorVideo() && VC.videos.bubble(action)) {
+    // dispatch sends targeted when a video has been picked by hand, so the
+    // existing shortcuts follow the pick instead of the heuristic.
+    if (VC.videos.dispatch(action)) {
       e.preventDefault();
       e.stopImmediatePropagation();
     }
@@ -179,10 +177,47 @@
     VC.presentation.tryAutoTheater(v);
   };
 
+  const siteDefaults = () => ({
+    ...VC.transform.DEFAULT_EFFECTS, rate: 1, loop: false, panelX: null, panelY: null,
+  });
+
+  const applyRemembered = () => {
+    if (VC.settings.isDisabledHere()) return;
+    const stored = VC.settings.readSite(siteDefaults());
+    const { rotate, flipX, flipY, zoom, pan } = stored;
+    VC.presentation.apply({ rotate, flipX, flipY, zoom, pan });
+    const v = VC.videos.pick();
+    if (!v) return;
+    if (stored.rate !== 1) VC.playback.setRate(v, stored.rate);
+    if (stored.loop) VC.playback.setLoop(v, true);
+  };
+
+  // The popup cannot read the tab's hostname without a permission we do not
+  // want, so it asks the frame that has it for free. Answer only the one thing
+  // it needs: video presence is the panel's business and it tracks that live.
+  if (isTop) {
+    chrome.runtime.onMessage.addListener((msg, _sender, respond) => {
+      if (!msg || msg.tag !== MSG_TAG) return undefined;
+      if (msg.type === 'availability') {
+        respond({ enabled: !VC.settings.isDisabledHere() });
+        return true;
+      }
+      if (msg.type === 'open-panel') {
+        // Idempotent: an already-open panel stays open. It closes from its own
+        // button, not from the popup.
+        if (!VC.settings.isDisabledHere()) VC.panel.open();
+        respond({ ok: true });
+        return true;
+      }
+      return undefined;
+    });
+  }
+
   VC.videos.init({ onAction: performAction });
   VC.videos.start();
   VC.settings.prime(chrome.storage, () => {
     VC.videos.announceIfVideoFound();
+    applyRemembered();
     const v = VC.videos.pick();
     if (v && !v.paused && !v.ended) VC.presentation.tryAutoTheater(v);
   });

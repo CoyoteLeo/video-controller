@@ -12,6 +12,9 @@ A minimalist Chrome extension that gives every HTML5 video on the web a consiste
 - **Volume** up / down with any key (default: `↑` / `↓`)
 - **Play / Pause** and **Mute** with any key (defaults: `Space` / `M`)
 - **Picture in Picture** — toggles Chrome's native floating player, which stays on top across tabs and is resized by dragging its edges (default: `P`). Works even on sites that mark their video `disablePictureInPicture`
+- **Control panel** — an in-page panel (opened from the toolbar popup) for rotate, flip, zoom, pan, speed, loop, A-B repeat and frame stepping. Frame stepping is approximate: the API does not expose a video's real frame rate
+- **Video picker** — on a page with several videos, choose which one the controls and the keyboard shortcuts act on, including videos inside cross-origin iframes
+- **Per-site memory** — panel settings are remembered automatically for the exact hostname you set them on, and cleared from the panel's own button
 - **Theater Mode** — enlarges the video player to fill the viewport with a black backdrop; custom player controls stay intact (default: `T`)
 - **Auto Theater** — list domains where Theater Mode should activate automatically the moment a video starts playing
 - **Configurable seek step** — 1 to 600 seconds
@@ -50,6 +53,7 @@ Click the toolbar icon to open the panel:
 | Volume Up / Down | Key that changes volume by ±10% |
 | Play / Pause, Mute | Keys that toggle playback and audio |
 | Picture in Picture | Key that toggles Chrome's native floating player |
+| Open control panel | Opens the in-page panel on the current tab. Disabled on blocked domains |
 | Theater Mode | Key that toggles the fullscreen-like overlay |
 | Seek step (seconds) | How much each seek keypress moves the playhead |
 | Auto Theater Mode | One domain per line. Subdomains are matched automatically (e.g. `youtube.com` covers `www.youtube.com`) |
@@ -62,10 +66,12 @@ To rebind a key: click the button, press the key. `Esc` cancels.
 .
 ├── manifest.json      # MV3 extension manifest
 ├── src/
-│   ├── settings.js     # defaults, storage, per-domain rules
-│   ├── videos.js       # video discovery and cross-frame routing
-│   ├── presentation.js # owns the player's inline style; theater overlay
-│   ├── panel.js        # toast
+│   ├── settings.js     # defaults, storage, per-domain rules, per-site memory
+│   ├── transform.js    # pure: effects to CSS (unit tested)
+│   ├── videos.js       # video discovery, ids, cross-frame routing
+│   ├── presentation.js # owns the player's inline style; theater is one effect
+│   ├── playback.js     # speed, loop, A-B repeat, frame step
+│   ├── panel.js        # shadow-root UI: toast layer and panel layer
 │   └── main.js         # keyboard listener, action dispatch, wiring
 ├── popup.html         # settings panel UI
 ├── popup.js           # settings panel logic
@@ -75,14 +81,20 @@ To rebind a key: click the button, press the key. `Esc` cancels.
 │   ├── icon-32.png
 │   ├── icon-48.png
 │   └── icon-128.png
-├── package.json       # zip + icon regeneration scripts
+├── test/              # node --test, no dependencies
+├── package.json       # test + zip + icon scripts
 ├── LICENSE
 └── README.md
 ```
 
 ## Development
 
-No build step — load the folder directly into Chrome. Settings are persisted via `chrome.storage.sync`, so changes in the popup propagate to every open tab without a reload.
+No build step — load the folder directly into Chrome. The pure layers have tests:
+
+```bash
+npm test   # node --test, no dependencies
+```
+ Settings are persisted via `chrome.storage.sync`, so changes in the popup propagate to every open tab without a reload.
 
 Regenerate PNG icons from the SVG source:
 

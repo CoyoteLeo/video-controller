@@ -1,3 +1,6 @@
+const MSG_TAG = '__video_controller_v1__';
+const AVAILABILITY_TIMEOUT_MS = 300;
+
 const DEFAULTS = {
   forward: 'ArrowRight',
   backward: 'ArrowLeft',
@@ -99,6 +102,61 @@ const reset = () => {
   render();
 };
 
+// The popup has no permission that would let it read the tab's hostname, so it
+// asks the content script — which has location.hostname for free — whether the
+// extension is enabled here. No reply means no content script is running, which
+// is a different answer from "blocked" and must not be reported as one.
+const askAvailability = (tabId) => new Promise((resolve) => {
+  let settled = false;
+  const finish = (value) => {
+    if (settled) return;
+    settled = true;
+    resolve(value);
+  };
+  setTimeout(() => finish('unavailable'), AVAILABILITY_TIMEOUT_MS);
+  try {
+    chrome.runtime.lastError;
+    chrome.tabs.sendMessage(tabId, { tag: MSG_TAG, type: 'availability' }, (reply) => {
+      if (chrome.runtime.lastError || !reply) return finish('unavailable');
+      return finish(reply.enabled ? 'enabled' : 'disabled-here');
+    });
+  } catch (_) {
+    finish('unavailable');
+  }
+});
+
+const setupPanelButton = async () => {
+  const btn = $('openPanel');
+  const note = $('panelNote');
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (!tab) {
+    btn.textContent = 'Control panel unavailable';
+    note.textContent = '';
+    return;
+  }
+
+  const state = await askAvailability(tab.id);
+  if (state === 'enabled') {
+    btn.textContent = 'Open control panel';
+    btn.disabled = false;
+    note.textContent = '';
+    btn.addEventListener('click', () => {
+      chrome.tabs.sendMessage(tab.id, { tag: MSG_TAG, type: 'open-panel' }, () => {
+        void chrome.runtime.lastError;
+        window.close();
+      });
+    });
+    return;
+  }
+  if (state === 'disabled-here') {
+    btn.textContent = 'Disabled on this site';
+    note.textContent = 'This domain is in the block list below. Remove it to use the panel here.';
+    return;
+  }
+  btn.textContent = 'Not available on this page';
+  note.textContent = 'Video Controller does not run on browser pages or the Chrome Web Store.';
+};
+
 const init = async () => {
   const stored = await chrome.storage.sync.get(DEFAULTS);
   Object.assign(state, stored);
@@ -110,6 +168,8 @@ const init = async () => {
       render();
     });
   });
+
+  setupPanelButton();
 
   document.addEventListener('keydown', onKeyCapture, true);
   $('saveBtn').addEventListener('click', save);
