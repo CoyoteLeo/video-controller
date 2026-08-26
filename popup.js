@@ -186,6 +186,26 @@ const detailFor = (id) => {
   }
 };
 
+// While a control is being dragged its own value is the truth — the round trip
+// to the page reports the last sweep's state, which lags behind the cursor.
+let dragging = null;
+let dragTimer = null;
+
+const LIVE_TEXT = {
+  rotate: (v) => `${fmt(v, 0)}°`,
+  zoom: (v) => `${fmt(v)}×`,
+  rate: (v) => `${fmt(v)}×`,
+};
+
+const showLive = (key, value) => {
+  const el = document.querySelector(`[data-val="${key}"]`);
+  const f = LIVE_TEXT[key];
+  if (el && f) el.textContent = f(value);
+  dragging = key;
+  clearTimeout(dragTimer);
+  dragTimer = setTimeout(() => { dragging = null; syncValues(); }, 400);
+};
+
 const VALUE_TEXT = {
   rotate: (s) => `${fmt(s.effects.rotate, 0)}°`,
   zoom: (s) => `${fmt(s.effects.zoom)}×`,
@@ -196,6 +216,7 @@ const VALUE_TEXT = {
 const syncValues = () => {
   if (!state) return;
   for (const el of document.querySelectorAll('[data-val]')) {
+    if (el.dataset.val === dragging) continue;
     const f = VALUE_TEXT[el.dataset.val];
     if (f) el.textContent = f(state);
   }
@@ -380,7 +401,9 @@ document.addEventListener('input', (ev) => {
   const el = ev.target.closest('[data-live]');
   if (!el) return;
   const value = Number(el.value);
-  switch (el.dataset.live) {
+  const key = el.dataset.live;
+  if (LIVE_TEXT[key]) showLive(key, value);
+  switch (key) {
     case 'rotate': return runLive('effect', { patch: { rotate: value } });
     case 'zoom': return runLive('effect', { patch: { zoom: value } });
     case 'rate': return runLive('rate', { value });
