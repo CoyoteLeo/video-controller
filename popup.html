@@ -4,174 +4,122 @@
   <meta charset="utf-8" />
   <title>Video Controller</title>
   <style>
-    :root { color-scheme: light dark; }
-    body {
-      font: 13px/1.4 -apple-system, system-ui, sans-serif;
-      margin: 0;
-      padding: 14px;
-      width: 300px;
-    }
-    h1 {
-      font-size: 14px;
-      margin: 0 0 10px;
-    }
-    .row {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 8px;
-      gap: 8px;
-    }
-    label {
-      flex: 1;
-      color: #555;
+    :root {
+      color-scheme: light dark;
+      --accent: #0a7;
+      --accent-soft: rgba(0, 170, 119, 0.14);
+      --line: rgba(128, 128, 128, 0.28);
+      --dim: #6b6b6b;
+      --tile: rgba(128, 128, 128, 0.08);
     }
     @media (prefers-color-scheme: dark) {
-      label { color: #bbb; }
+      :root { --dim: #9a9a9a; --tile: rgba(255, 255, 255, 0.06); }
     }
-    .key-btn, input[type="number"] {
-      min-width: 96px;
-      padding: 6px 8px;
-      border: 1px solid #bbb;
-      border-radius: 4px;
-      background: transparent;
-      font: inherit;
-      text-align: center;
-      color: inherit;
-      cursor: pointer;
-      box-sizing: border-box;
+    * { box-sizing: border-box; }
+    body { width: 344px; margin: 0; font: 14px/1.45 -apple-system, system-ui, sans-serif; }
+
+    header {
+      display: flex; align-items: center; gap: 8px;
+      padding: 12px 14px; border-bottom: 1px solid var(--line);
     }
-    input[type="number"] { cursor: text; text-align: right; }
-    .key-btn:hover { border-color: #666; }
-    .key-btn.listening {
-      border-color: #0a7;
-      background: rgba(0, 170, 119, 0.08);
+    header .title { flex: 1; font-weight: 600; }
+    header .who { font-size: 12px; color: var(--dim); }
+    .icon-btn {
+      border: 0; background: transparent; color: inherit; cursor: pointer;
+      font-size: 16px; padding: 3px 5px; border-radius: 4px; line-height: 1;
     }
-    .actions {
-      display: flex;
-      justify-content: space-between;
-      margin-top: 12px;
-      gap: 8px;
+    .icon-btn:hover { background: var(--tile); }
+
+    .notice { margin: 14px; padding: 12px; border: 1px solid var(--line); border-radius: 7px; color: var(--dim); font-size: 13px; }
+
+    .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 7px; padding: 12px 14px; }
+    .tile {
+      display: flex; flex-direction: column; align-items: center; gap: 3px;
+      padding: 10px 2px 8px; border-radius: 8px; cursor: pointer;
+      border: 1px solid transparent; background: var(--tile); color: inherit;
+      font: inherit; font-size: 11px;
     }
-    button.primary, button.secondary {
-      flex: 1;
-      padding: 7px 10px;
-      border-radius: 4px;
-      font: inherit;
-      cursor: pointer;
-      border: 1px solid transparent;
+    .tile .glyph { font-size: 20px; line-height: 1; }
+    .tile:hover:not(:disabled) { border-color: var(--accent); }
+    /* Two different facts, two different marks: `active` means this effect is
+       applied to the video, `open` only means its controls are showing. */
+    .tile.active { border-color: var(--accent); background: var(--accent-soft); }
+    .tile.open { border-color: var(--accent); border-style: dashed; }
+    .tile:disabled { opacity: 0.35; cursor: default; }
+
+    .detail { padding: 0 14px 12px; }
+    .detail:empty { display: none; }
+    .card { border: 1px solid var(--line); border-radius: 8px; padding: 11px 12px; }
+    .card h2 { margin: 0 0 9px; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--dim); font-weight: 600; }
+    .row { display: flex; align-items: center; gap: 7px; margin-bottom: 8px; }
+    .row:last-child { margin-bottom: 0; }
+    .row .label { flex: 1; color: var(--dim); }
+    .val { min-width: 52px; text-align: right; font-variant-numeric: tabular-nums; color: var(--dim); }
+    input[type="range"] { flex: 1; min-width: 0; accent-color: var(--accent); }
+    input[type="number"] {
+      width: 74px; padding: 4px 6px; font: inherit; color: inherit; text-align: right;
+      background: transparent; border: 1px solid var(--line); border-radius: 4px;
     }
-    button.primary {
-      background: #0a7;
-      color: #fff;
+    button.act {
+      padding: 6px 11px; border-radius: 6px; cursor: pointer; font: inherit;
+      border: 1px solid var(--line); background: transparent; color: inherit;
     }
-    button.primary:hover { background: #095; }
-    button.secondary {
-      background: transparent;
-      border-color: #bbb;
-      color: inherit;
+    button.act:hover:not(:disabled) { border-color: var(--accent); }
+    button.act.on { border-color: var(--accent); background: var(--accent-soft); }
+    button.act:disabled { opacity: .4; cursor: default; }
+
+    ul.videos { list-style: none; margin: 0; padding: 0; }
+    ul.videos li { margin-bottom: 4px; }
+    ul.videos li:last-child { margin: 0; }
+    ul.videos button { width: 100%; text-align: left; font-size: 13px; }
+
+    footer {
+      display: flex; align-items: center; gap: 6px;
+      padding: 10px 14px; border-top: 1px solid var(--line); font-size: 12px; color: var(--dim);
     }
-    button.secondary:hover { border-color: #666; }
-    .status {
-      margin-top: 8px;
-      min-height: 16px;
-      font-size: 12px;
-      color: #0a7;
-      text-align: center;
+    footer .count { flex: 1; }
+
+    .settings { padding: 14px; }
+    .settings h2 { margin: 0 0 9px; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--dim); font-weight: 600; }
+    .settings .section { margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--line); }
+    .key-btn {
+      min-width: 96px; padding: 6px 10px; text-align: center; font: inherit; color: inherit;
+      background: transparent; border: 1px solid var(--line); border-radius: 4px; cursor: pointer;
     }
-    .hint {
-      font-size: 11px;
-      color: #888;
-      margin-top: 4px;
-    }
-    .section {
-      margin-top: 14px;
-      padding-top: 10px;
-      border-top: 1px solid rgba(128, 128, 128, 0.2);
-    }
-    .section-title {
-      font-size: 12px;
-      font-weight: 600;
-      color: #555;
-      margin-bottom: 6px;
-    }
-    @media (prefers-color-scheme: dark) {
-      .section-title { color: #bbb; }
-    }
+    .key-btn:hover { border-color: var(--accent); }
+    .key-btn.listening { border-color: var(--accent); background: var(--accent-soft); }
     textarea {
-      width: 100%;
-      min-height: 70px;
-      box-sizing: border-box;
-      padding: 6px 8px;
-      border: 1px solid #bbb;
-      border-radius: 4px;
-      background: transparent;
-      font: 12px/1.4 ui-monospace, Menlo, monospace;
-      color: inherit;
-      resize: vertical;
+      width: 100%; min-height: 64px; padding: 7px 9px; resize: vertical;
+      border: 1px solid var(--line); border-radius: 4px; background: transparent; color: inherit;
+      font: 12px/1.45 ui-monospace, Menlo, monospace;
     }
-    textarea:focus { outline: none; border-color: #0a7; }
+    textarea:focus { outline: none; border-color: var(--accent); }
+    .hint { font-size: 12px; color: var(--dim); margin-top: 6px; }
+    .actions { display: flex; gap: 8px; margin-top: 12px; }
+    .actions button { flex: 1; padding: 8px 12px; border-radius: 6px; font: inherit; cursor: pointer; }
+    .primary { border: 1px solid var(--accent); background: var(--accent); color: #fff; }
+    .secondary { border: 1px solid var(--line); background: transparent; color: inherit; }
+    .status { min-height: 16px; margin-top: 7px; font-size: 12px; color: var(--accent); text-align: center; }
   </style>
 </head>
 <body>
-  <h1>Video Controller</h1>
+  <header>
+    <span class="title">Video Controller</span>
+    <span class="who" id="who"></span>
+    <button class="icon-btn" id="gear" title="Settings" aria-label="Settings">⚙</button>
+  </header>
 
-  <div class="row">
-    <label for="keyForward">Forward</label>
-    <button class="key-btn" id="keyForward" data-action="forward"></button>
-  </div>
-  <div class="row">
-    <label for="keyBackward">Backward</label>
-    <button class="key-btn" id="keyBackward" data-action="backward"></button>
-  </div>
-  <div class="row">
-    <label for="keyVolumeUp">Volume Up</label>
-    <button class="key-btn" id="keyVolumeUp" data-action="volumeUp"></button>
-  </div>
-  <div class="row">
-    <label for="keyVolumeDown">Volume Down</label>
-    <button class="key-btn" id="keyVolumeDown" data-action="volumeDown"></button>
-  </div>
-  <div class="row">
-    <label for="keyTheater">Theater Mode</label>
-    <button class="key-btn" id="keyTheater" data-action="theater"></button>
-  </div>
-  <div class="row">
-    <label for="keyPlayPause">Play / Pause</label>
-    <button class="key-btn" id="keyPlayPause" data-action="playPause"></button>
-  </div>
-  <div class="row">
-    <label for="keyMute">Mute</label>
-    <button class="key-btn" id="keyMute" data-action="mute"></button>
-  </div>
-  <div class="row">
-    <label for="keyPip">Picture in Picture</label>
-    <button class="key-btn" id="keyPip" data-action="pip"></button>
-  </div>
-  <div class="hint">Click a button, then press a key to bind it.</div>
-
-  <div class="row" style="margin-top: 12px;">
-    <label for="seekSeconds">Seek step (seconds)</label>
-    <input type="number" id="seekSeconds" min="1" max="600" step="1" />
+  <div id="main">
+    <div id="notice"></div>
+    <div class="grid" id="grid"></div>
+    <div class="detail" id="detail"></div>
+    <footer>
+      <span class="count" id="memory"></span>
+      <button class="act" id="forget" disabled>Clear</button>
+    </footer>
   </div>
 
-  <div class="section">
-    <div class="section-title">Auto Theater Mode</div>
-    <textarea id="autoDomains" placeholder="One domain per line, e.g.&#10;youtube.com"></textarea>
-    <div class="hint">Theater mode activates automatically on these domains when a video starts playing. Subdomains are matched (e.g. <code>youtube.com</code> covers <code>www.youtube.com</code>).</div>
-  </div>
-
-  <div class="section">
-    <div class="section-title">Block List</div>
-    <textarea id="blockDomains" placeholder="One domain per line, e.g.&#10;netflix.com"></textarea>
-    <div class="hint">Video Controller is fully disabled on these domains, leaving native shortcuts intact. Subdomains are matched.</div>
-  </div>
-
-  <div class="actions">
-    <button class="secondary" id="resetBtn">Reset</button>
-    <button class="primary" id="saveBtn">Save</button>
-  </div>
-  <div class="status" id="status"></div>
+  <div class="settings" id="settings" hidden></div>
 
   <script src="popup.js"></script>
 </body>

@@ -1,9 +1,11 @@
 {
   "manifest_version": 3,
   "name": "Video Controller",
-  "version": "1.7.0",
-  "description": "Configurable keyboard controls for HTML5 video: play/pause, mute, seek, volume, picture-in-picture, theater mode, and per-domain auto-theater.",
-  "permissions": ["storage"],
+  "version": "2.0.0",
+  "description": "Keyboard controls plus an in-page panel for HTML5 video: rotate, flip, zoom, speed, loop, A-B repeat, picture-in-picture and theater mode.",
+  "permissions": [
+    "storage"
+  ],
   "icons": {
     "16": "icons/icon-16.png",
     "32": "icons/icon-32.png",
@@ -12,18 +14,28 @@
   },
   "action": {
     "default_title": "Video Controller",
-    "default_popup": "popup.html",
     "default_icon": {
       "16": "icons/icon-16.png",
       "32": "icons/icon-32.png",
       "48": "icons/icon-48.png",
       "128": "icons/icon-128.png"
-    }
+    },
+    "default_popup": "popup.html"
   },
   "content_scripts": [
     {
-      "matches": ["<all_urls>"],
-      "js": ["content.js"],
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "src/settings.js",
+        "src/transform.js",
+        "src/videos.js",
+        "src/presentation.js",
+        "src/playback.js",
+        "src/toast.js",
+        "src/main.js"
+      ],
       "run_at": "document_start",
       "all_frames": true
     }
