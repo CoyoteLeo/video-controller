@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Video Controller",
   "version": "2.0.0",
-  "description": "Keyboard controls plus an in-page panel for HTML5 video: rotate, flip, zoom, speed, loop, A-B repeat, picture-in-picture and theater mode.",
+  "description": "Control any HTML5 video: rotate, flip, zoom, speed, loop, A-B repeat, picture-in-picture and theater mode, by panel or keyboard.",
   "permissions": [
     "storage"
   ],
