@@ -21,20 +21,35 @@
     return PLAYER_CLASS_RE.test(cls) || PLAYER_CLASS_RE.test(id);
   };
 
+  const CONTAINER_SEARCH_DEPTH = 5;
+
+  // Walk a bounded distance rather than stopping at the first ancestor that is
+  // not at least as big as the video. Players routinely wrap the video in a
+  // zero-height positioning box — YouTube's .html5-video-container measures
+  // 2124x0 around an 1541x867 video — and stopping there picks something inside
+  // the player instead of the player, which is what breaks the site's layout
+  // when it gets hoisted.
+  //
+  // The innermost player-like ancestor wins, not the outermost: on YouTube the
+  // regex also matches #ytd-player and #player-container further up, and taking
+  // those would hoist far more of the page than the player itself.
   const pickPlayerContainer = (video) => {
     const vRect = video.getBoundingClientRect();
     let el = video.parentElement;
-    let firstMatching = null;
+    let firstCovering = null;
     let bestPlayerLike = null;
-    while (el && el !== document.body && el !== document.documentElement) {
+    let depth = 0;
+    while (el && el !== document.body && el !== document.documentElement
+           && depth < CONTAINER_SEARCH_DEPTH) {
       const r = el.getBoundingClientRect();
-      const matches = r.width >= vRect.width - 2 && r.height >= vRect.height - 2;
-      if (!matches) break;
-      if (!firstMatching) firstMatching = el;
-      if (isPlayerLike(el)) bestPlayerLike = el;
+      if (r.width >= vRect.width - 2 && r.height >= vRect.height - 2) {
+        if (!firstCovering) firstCovering = el;
+        if (!bestPlayerLike && isPlayerLike(el)) bestPlayerLike = el;
+      }
       el = el.parentElement;
+      depth += 1;
     }
-    return bestPlayerLike || firstMatching || video.parentElement || video;
+    return bestPlayerLike || firstCovering || video.parentElement || video;
   };
 
   const captureStyle = (el) => el.getAttribute('style');
