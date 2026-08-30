@@ -168,6 +168,17 @@
     if (backdrop) backdrop.remove();
     if (closeBtn) closeBtn.remove();
     document.documentElement.style.overflow = take.originalRootOverflow || '';
+
+    // Some players own the video's inline geometry and derive it from the
+    // container's size — YouTube writes width/height/left/top on the element and
+    // rewrites all four on a bare resize event. Theater changes that size, so the
+    // player recomputes while we are in it, and the snapshot we captured on the
+    // way in is stale by the time we put it back: the video lands at the wrong
+    // left offset and one side shows a black bar, worsening with each toggle.
+    // Restoring the string is not enough; the owner has to re-derive it. Next
+    // frame, so it measures the restored layout rather than the one being undone.
+    requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
+
     take.placeholder = null;
     take.backdrop = null;
     take.closeBtn = null;
