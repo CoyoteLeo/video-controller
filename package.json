@@ -1,6 +1,6 @@
 {
   "name": "video-controller",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "description": "Control any HTML5 video: rotate, flip, zoom, speed, loop, A-B repeat, picture-in-picture and theater mode, by panel or keyboard.",
   "private": true,
   "license": "MIT",
