@@ -167,7 +167,24 @@
     if (VC.videos.dispatch(action)) {
       e.preventDefault();
       e.stopImmediatePropagation();
+      swallowUntilKeyUp(e);
     }
+  };
+
+  // Suppressing keydown is not enough. A site can act on keypress or keyup, which
+  // that suppression never touches, so one press runs our action and the site's —
+  // measured on YouTube, where keydown never reaches the page but keyup does, and
+  // its play/pause lands after the key is released.
+  const swallowing = new Set();
+
+  const swallowUntilKeyUp = (e) => swallowing.add(e.code || e.key);
+
+  const swallowFollowUp = (e) => {
+    const id = e.code || e.key;
+    if (!swallowing.has(id)) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    if (e.type === 'keyup') swallowing.delete(id);
   };
 
   const onAnyVideoPlay = (e) => {
@@ -316,4 +333,9 @@
 
   document.addEventListener('play', onAnyVideoPlay, true);
   window.addEventListener('keydown', handler, true);
+  window.addEventListener('keypress', swallowFollowUp, true);
+  window.addEventListener('keyup', swallowFollowUp, true);
+  // A key held while focus leaves the page never delivers its keyup here, so the
+  // entry would sit in the set forever.
+  window.addEventListener('blur', () => swallowing.clear());
 })();
