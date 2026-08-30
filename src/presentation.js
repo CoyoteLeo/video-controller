@@ -142,11 +142,19 @@
       background: '#000',
       'z-index': '2147483646',
     });
+    // Viewport units, not percentages. A percentage resolves against the video's
+    // containing block, and players put the video inside a wrapper that has no
+    // height of its own — YouTube's .html5-video-container measures 2124x0 — so
+    // height:100% collapses the video to nothing and theater shows a black
+    // screen. The hoisted container is the viewport, so size to the viewport
+    // directly and stop depending on whatever sits in between.
     fix(video, {
-      width: '100%',
-      height: '100%',
-      'max-width': '100%',
-      'max-height': '100%',
+      top: '0',
+      left: '0',
+      width: '100vw',
+      height: '100vh',
+      'max-width': '100vw',
+      'max-height': '100vh',
       'object-fit': 'contain',
       background: '#000',
     });
