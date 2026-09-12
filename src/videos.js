@@ -224,22 +224,17 @@
 
   const start = () => {
     window.addEventListener('message', onMessage, false);
-    if (!isTop) {
-      const videoObserver = new MutationObserver(() => {
-        announceIfVideoFound();
-        if (announcedToParent && announcedToDescendants) videoObserver.disconnect();
-      });
-      videoObserver.observe(document.documentElement, { childList: true, subtree: true });
-    } else {
-      const topVideoObserver = new MutationObserver(() => {
-        announceIfVideoFound();
-        const v = pickVideo();
-        if (!v) return;
-        VC.presentation.tryAutoTheater(v);
-        if (announcedToDescendants) topVideoObserver.disconnect();
-      });
-      topVideoObserver.observe(document.documentElement, { childList: true, subtree: true });
-    }
+    // This fires on the bare <video> the parser has just inserted, which is
+    // earlier than any player library has had a chance to claim it. video.js
+    // copies every attribute of that tag — style included — onto the wrapper it
+    // builds, so an inline style written here is duplicated onto an element the
+    // extension never tracks and can never take back off. Announcing is all this
+    // observer may do; applying anything waits for playback (see main.js).
+    const videoObserver = new MutationObserver(() => {
+      announceIfVideoFound();
+      if ((isTop || announcedToParent) && announcedToDescendants) videoObserver.disconnect();
+    });
+    videoObserver.observe(document.documentElement, { childList: true, subtree: true });
 
     // Ask the parent if it (or any ancestor / sibling subtree) has a video,
     // so we know to bubble keys up even though our own frame has none.
