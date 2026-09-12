@@ -191,6 +191,7 @@
     const v = e.target;
     if (!(v instanceof HTMLVideoElement)) return;
     VC.videos.announceIfVideoFound();
+    applyRemembered(v);
     VC.presentation.tryAutoTheater(v);
   };
 
@@ -200,15 +201,25 @@
 
   const remember = (key, value) => VC.settings.setSiteValue(key, value, siteDefaults());
 
-  const applyRemembered = () => {
+  // Both halves of this gate are load-order hazards. The page's player may not
+  // have claimed the <video> yet, and a style written before it does ends up
+  // copied onto the wrapper it builds, where nothing here can take it off again
+  // (videos.js). And a play event can beat the storage round-trip, where
+  // applying an empty profile would latch the real one away for good — hence the
+  // prime callback as a second door for a video that is already playing.
+  // A hand-driven action needs no gate: by then the player is done.
+  let settingsReady = false;
+  let rememberedApplied = false;
+
+  const applyRemembered = (video) => {
+    if (!settingsReady || rememberedApplied) return;
     if (VC.settings.isDisabledHere()) return;
+    rememberedApplied = true;
     const stored = VC.settings.readSite(siteDefaults());
     const { rotate, flipX, flipY, zoom, pan } = stored;
-    VC.presentation.apply({ rotate, flipX, flipY, zoom, pan });
-    const v = VC.videos.pick();
-    if (!v) return;
-    if (stored.rate !== 1) VC.playback.setRate(v, stored.rate);
-    if (stored.loop) VC.playback.setLoop(v, true);
+    VC.presentation.apply({ rotate, flipX, flipY, zoom, pan }, video);
+    if (stored.rate !== 1) VC.playback.setRate(video, stored.rate);
+    if (stored.loop) VC.playback.setLoop(video, true);
   };
 
   // The panel lives in the extension's own document, so it needs the page's
@@ -325,10 +336,12 @@
   VC.videos.init({ onAction: runCommand });
   VC.videos.start();
   VC.settings.prime(chrome.storage, () => {
+    settingsReady = true;
     VC.videos.announceIfVideoFound();
-    applyRemembered();
     const v = VC.videos.pick();
-    if (v && !v.paused && !v.ended) VC.presentation.tryAutoTheater(v);
+    if (!v || v.paused || v.ended) return;
+    applyRemembered(v);
+    VC.presentation.tryAutoTheater(v);
   });
 
   document.addEventListener('play', onAnyVideoPlay, true);
